@@ -14,16 +14,15 @@ const int WASTE_REPO_HEIGHT = 75;
 const int WASTE_REPO_WIDTH = 25;
 const uint16_t BTN_TRIANGLE_COLOR = ILI9341_GREEN;
 const uint16_t BTN_SQUARE_COLOR = ILI9341_RED;
-const int WASTE_REPO_ANIM_DELAY = 200; // Animation delay in milliseconds between waste repo frames
 const int RIGHT_TOILET_FLUSH_DELAY_MS = 10000; // 10 seconds delay for right toilet timer
 
 // Animation timing constants
 const int TOILET_ANIM_STAGE_DURATION_MS = 500;
 const int CAMERA_FLASH_STAGE_DURATION_MS = 100;
-const int WASTE_REPO_ANIM_STAGE_DURATION_MS = 200;
+const int WASTE_REPO_ANIM_STAGE_DURATION_MS = 400;
 const int TOILET_ANIM_TOTAL_STAGES = 4;
 const int CAMERA_FLASH_TOTAL_STAGES = 5;
-const int WASTE_REPO_ANIM_TOTAL_STAGES = 12; // 4 images x 3 loops
+const int WASTE_REPO_ANIM_TOTAL_STAGES = 5; // 5 steps: 01->02->03->04->01
 
 // Relay timing constants
 int _pumpWasteMl = 100; // ML of waste to pump
@@ -32,7 +31,7 @@ const int PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteMl * 1000) / PUMP_WASTE_ML_SEC;
 const int TOILET_FLUSH_HOLD_TIME_MS = 2000; // 2 seconds
 
 // Flush flow variables (configurable)
-int _flushTotalDurationMs = 30000; // 30 seconds total flush time
+int _flushTotalDurationMs = 60000; // 60 seconds total flush time
 int _wasteRepoTriggerDelayMs = 5000; // 5 seconds after flush starts
 int _cameraTriggerAfterFlushMs = 2500; // 0.5 * waste repo trigger delay
 int _flushCountForCamera = 3; // Camera triggers every 3 flushes
