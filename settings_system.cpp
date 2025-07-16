@@ -15,11 +15,14 @@ SettingsSystem::SettingsSystem(TFT_eSPI* display) {
   touching = false;
   lastTouch = 0;
   
-  // Initialize settings with your values
-  settings[0] = {"Flush Delay Time", "ms", 500, 0, 5000, 50, false, "delayTime"};
-  settings[1] = {"Flush Time Gap", "ms", 1000, 100, 10000, 100, false, "timeGap"};
-  settings[2] = {"Waste Qty Per Flush", "oz", 16, 1, 100, 1, false, "wasteQty"};
-  settings[3] = {"Flush to Snap Pic", "", 1, 0, 1, 1, false, "snapPic"};
+  // Initialize settings with specific values as per requirements
+  settings[0] = {"Right Toilet Delay", "sec", 10, 5, 40, 5, false, "rightDelay"};
+  settings[1] = {"Flush Time Lapse", "min", 5, 1, 45, 5, false, "flushTime"};
+  settings[2] = {"Waste Trigger Delay", "ms", 5000, 2500, 20000, 2500, false, "wasteDelay"};
+  settings[3] = {"Camera Trigger Delay", "ms", 2500, 2500, 20000, 2500, false, "cameraDelay"};
+  settings[4] = {"Pump Waste Dose", "ml", 100, 50, 300, 50, false, "pumpDose"};
+  settings[5] = {"Toilet Relay Hold", "ms", 2000, 1000, 6000, 1000, false, "relayHold"};
+  settings[6] = {"Camera Capture Count", "", 3, 1, 30, 1, false, "cameraCount"};
 }
 
 void SettingsSystem::begin() {
@@ -70,7 +73,7 @@ void SettingsSystem::handleSettingsPageTouch(int x, int y) {
   int itemHeight = 60;
   int startY = 70;
   
-  for(int i = 0; i < 4; i++) {
+  for(int i = 0; i < 7; i++) {
     int itemY = startY + i * itemHeight;
     
     if(y >= itemY && y <= itemY + 55) {
@@ -98,14 +101,14 @@ void SettingsSystem::handleSettingsPageTouch(int x, int y) {
 }
 
 void SettingsSystem::loadSettings() {
-  for(int i = 0; i < 4; i++) {
+  for(int i = 0; i < 7; i++) {
     settings[i].value = prefs.getInt(settings[i].prefKey, settings[i].value);
   }
   Serial.println("Flush settings loaded from memory");
 }
 
 void SettingsSystem::saveSettings() {
-  for(int i = 0; i < 4; i++) {
+  for(int i = 0; i < 7; i++) {
     prefs.putInt(settings[i].prefKey, settings[i].value);
   }
   Serial.println("Flush settings saved to memory");
@@ -119,7 +122,7 @@ void SettingsSystem::drawInterface() {
   int itemHeight = 60;
   int startY = 70;
   
-  for(int i = 0; i < 4; i++) {
+  for(int i = 0; i < 7; i++) {
     drawSettingItem(i, startY + i * itemHeight);
   }
 }
@@ -190,48 +193,43 @@ void SettingsSystem::drawSettingItem(int index, int y) {
     tft->setTextDatum(TR_DATUM);
     tft->drawString(valueStr, x + w - 12, y + 30);
   }
-  
-  // Range info (if applicable)
-  if(setting.maxVal > setting.minVal && String(setting.label) != "Flush to Snap Pic") {
-    String range = "Range: " + String(setting.minVal) + " - " + String(setting.maxVal) + setting.unit;
-    tft->setTextColor(SETTINGS_TEXT_SEC_COLOR);
-    tft->setTextSize(1);
-    tft->setTextDatum(TL_DATUM);
-    tft->drawString(range, x + 12, y + 35);
-  }
 }
 
 String SettingsSystem::formatSettingValue(FlushSetting setting) {
-  String result;
-  
-  if(String(setting.label) == "Flush to Snap Pic") {
-    result = setting.value ? "ON" : "OFF";
-  } else {
-    result = String(setting.value) + setting.unit;
-  }
-  
-  return result;
+  return String(setting.value) + setting.unit;
 }
 
 void SettingsSystem::resetEditingStates() {
-  for(int i = 0; i < 4; i++) {
+  for(int i = 0; i < 7; i++) {
     settings[i].editing = false;
   }
 }
 
 // Getter functions for main program to access settings
-int SettingsSystem::getFlushDelayTime() {
+int SettingsSystem::getRightToiletFlushDelaySec() {
   return settings[0].value;
 }
 
-int SettingsSystem::getFlushTimeGap() {
+int SettingsSystem::getFlushTotalTimeLapseMin() {
   return settings[1].value;
 }
 
-int SettingsSystem::getWasteQtyPerFlush() {
+int SettingsSystem::getWasteRepoTriggerDelayMs() {
   return settings[2].value;
 }
 
-bool SettingsSystem::getFlushToSnapPic() {
-  return settings[3].value == 1;
+int SettingsSystem::getCameraTriggerAfterFlushMs() {
+  return settings[3].value;
+}
+
+int SettingsSystem::getPumpWasteDoseML() {
+  return settings[4].value;
+}
+
+int SettingsSystem::getToiletFlushRelayHoldTimeMS() {
+  return settings[5].value;
+}
+
+int SettingsSystem::getFlushCountForCameraCapture() {
+  return settings[6].value;
 }

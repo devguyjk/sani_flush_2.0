@@ -14,7 +14,7 @@ const int WASTE_REPO_HEIGHT = 75;
 const int WASTE_REPO_WIDTH = 25;
 const uint16_t BTN_TRIANGLE_COLOR = ILI9341_GREEN;
 const uint16_t BTN_SQUARE_COLOR = ILI9341_RED;
-const int RIGHT_TOILET_FLUSH_DELAY_MS = 10000; // 10 seconds delay for right toilet timer
+int RIGHT_TOILET_FLUSH_DELAY_MS = 10000; // 10 seconds delay for right toilet timer
 
 // Animation timing constants
 const int TOILET_ANIM_STAGE_DURATION_MS = 500;
@@ -25,16 +25,19 @@ const int CAMERA_FLASH_TOTAL_STAGES = 5;
 const int WASTE_REPO_ANIM_TOTAL_STAGES = 5; // 5 steps: 01->02->03->04->01
 
 // Relay timing constants
-int _pumpWasteMl = 100; // ML of waste to pump
+int _pumpWasteDoseML = 100; // ML of waste to pump
 const int PUMP_WASTE_ML_SEC = 50; // ML per second pump rate
-const int PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteMl * 1000) / PUMP_WASTE_ML_SEC; // 2000ms
-const int TOILET_FLUSH_HOLD_TIME_MS = 2000; // 2 seconds
+int PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteDoseML * 1000) / PUMP_WASTE_ML_SEC; // 2000ms
+int TOILET_FLUSH_HOLD_TIME_MS = 2000; // 2 seconds
 
 // Flush flow variables (configurable)
-int _flushTotalDurationMs = 60000; // 60 seconds total flush time
+int _flushTotalTimeLapseMin = 5; // 5 minutes between flush cycles
 int _wasteRepoTriggerDelayMs = 5000; // 5 seconds after flush starts
-int _cameraTriggerAfterFlushMs = 2500; // 0.5 * waste repo trigger delay
-int _flushCountForCamera = 3; // Camera triggers every 3 flushes
+int _cameraTriggerAfterFlushMs = 2500; // Camera trigger delay
+int _flushCountForCameraCapture = 3; // Camera triggers every 3 flushes
+
+// Flush duration constant (60 seconds)
+const int FLUSH_DURATION_MS = 60000; // 60 seconds per flush
 
 // GLOBAL VARIABLES (prefixed with _)
 bool _flushLeft = false;
@@ -69,6 +72,27 @@ AnimationState _animStates[3][2] = {
   {{0, 0, false}, {0, 0, false}}, // Camera Left/Right  
   {{0, 0, false}, {0, 0, false}}  // WasteRepo Left/Right
 };
+
+// Camera and server configuration
+const char* leftCameraID = "150deaa5";
+const char* rightCameraID = "c4df83c4";
+const char* uploadServerURL = "http://sani-photo-uploader.duckdns.org:5000/uploadSaniPhoto";
+String leftCameraCaptureUrl = "http://" + String(leftCameraID) + ".duckdns.org/capture?flash=true";
+String rightCameraCaptureUrl = "http://" + String(rightCameraID) + ".duckdns.org/capture?flash=true";
+
+// Hardware pin definitions
+const int RELAY_P1_PIN = 35;
+const int RELAY_P2_PIN = 36;
+const int RELAY_T1_PIN = 37;
+const int RELAY_T2_PIN = 38;
+const int TM1637_SCK = 16;
+const int TM1637_DIO = 17;
+
+// UI constants
+const unsigned long BUTTON_DEBOUNCE_MS = 300;
+
+// UI state variables
+unsigned long lastButtonPress = 0;
 
 // TFT object
 TFT_eSPI tft = TFT_eSPI();

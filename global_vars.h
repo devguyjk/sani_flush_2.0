@@ -21,7 +21,25 @@ extern const int WASTE_REPO_WIDTH;
 extern const uint16_t BTN_TRIANGLE_COLOR;
 extern const uint16_t BTN_SQUARE_COLOR;
 extern const int WASTE_REPO_ANIM_DELAY;
-extern const int RIGHT_TOILET_FLUSH_DELAY_MS;
+extern int RIGHT_TOILET_FLUSH_DELAY_MS;
+
+// Camera and server configuration
+extern const char* leftCameraID;
+extern const char* rightCameraID;
+extern const char* uploadServerURL;
+extern String leftCameraCaptureUrl;
+extern String rightCameraCaptureUrl;
+
+// Hardware pin definitions
+extern const int RELAY_P1_PIN;
+extern const int RELAY_P2_PIN;
+extern const int RELAY_T1_PIN;
+extern const int RELAY_T2_PIN;
+extern const int TM1637_SCK;
+extern const int TM1637_DIO;
+
+// UI constants
+extern const unsigned long BUTTON_DEBOUNCE_MS;
 
 // Animation timing constants
 extern const int TOILET_ANIM_STAGE_DURATION_MS;
@@ -32,16 +50,19 @@ extern const int CAMERA_FLASH_TOTAL_STAGES;
 extern const int WASTE_REPO_ANIM_TOTAL_STAGES;
 
 // Relay timing constants
-extern int _pumpWasteMl;
+extern int _pumpWasteDoseML;
 extern const int PUMP_WASTE_ML_SEC;
-extern const int PUMP_RELAY_ACTIVE_TIME_MS;
-extern const int TOILET_FLUSH_HOLD_TIME_MS;
+extern int PUMP_RELAY_ACTIVE_TIME_MS;
+extern int TOILET_FLUSH_HOLD_TIME_MS;
 
 // Flush flow variables (configurable)
-extern int _flushTotalDurationMs;
+extern int _flushTotalTimeLapseMin;
 extern int _wasteRepoTriggerDelayMs;
 extern int _cameraTriggerAfterFlushMs;
-extern int _flushCountForCamera;
+extern int _flushCountForCameraCapture;
+
+// Flush duration constant (60 seconds)
+extern const int FLUSH_DURATION_MS;
 
 // GLOBAL VARIABLES (prefixed with _)
 extern bool _flushLeft;
@@ -60,6 +81,9 @@ extern int _timerRightSeconds;
 extern bool _timerRightRunning;
 extern unsigned long _timerRightStartTime;
 extern unsigned long _currentTime;
+
+// UI state variables
+extern unsigned long lastButtonPress;
 
 // Flush flow state variables
 extern bool _flushFlowActive;

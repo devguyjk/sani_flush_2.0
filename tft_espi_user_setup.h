@@ -20,8 +20,6 @@
 
 // XPT2046 TouchPins
 #define TOUCH_CS 9
-#define TOUCH_DRIVER XPT2046_DRIVER
-#define SUPPORT_TRANSACTIONS
 
 // Enable touch support
 #define TOUCH_ENABLE
@@ -45,9 +43,7 @@
 
 //#define SPI_FREQUENCY  27000000
 #define SPI_FREQUENCY  40000000   // Maximum for ILI9341
-
 #define SPI_READ_FREQUENCY  6000000 // 6 MHz is the maximum SPI read speed for the ST7789V
-
 #define SPI_TOUCH_FREQUENCY 2500000
 
 // Color depth

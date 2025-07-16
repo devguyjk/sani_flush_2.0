@@ -23,5 +23,8 @@ void updateTimers();
 void initializeFlushFlow();
 void flushToilet(Location location);
 void updateFlushFlow();
+void drawFlowDetails();
+void drawFlushBar();
+void updateFlushBar();
 
 #endif // DRAW_FUNCTIONS_H

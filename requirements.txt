@@ -1,0 +1,5 @@
+BOARDS:
+Arduino ESP32 Boards - 2.0.12
+ESP32 - 3.1.0
+LIBRARY:
+TFT_espi : 2.5.34

@@ -2,6 +2,7 @@
 #include <TM1637Display.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <TJpg_Decoder.h>
 #include "sani_flush_logo_165x40.h"
 #include "Toilet_Full_85x105_01.h"
 #include "Toilet_Full_85x105_02.h"
@@ -14,19 +15,29 @@
 #include "Waste_Repo_75x25_04.h"
 
 // Animation type constants
-enum AnimationType { TOILET = 0, CAMERA = 1, WASTE_REPO = 2 };
+enum AnimationType
+{
+  TOILET = 0,
+  CAMERA = 1,
+  WASTE_REPO = 2
+};
 
 // External references
 extern TM1637Display display;
 extern int flushCount;
-extern const char* leftCameraID;
-extern const char* rightCameraID;
+extern const char *leftCameraID;
+extern const char *rightCameraID;
+extern const char *uploadServerURL;
+extern String leftCameraCaptureUrl;
+extern String rightCameraCaptureUrl;
+extern const unsigned long BUTTON_DEBOUNCE_MS;
+extern unsigned long lastButtonPress;
 
 // Function prototypes
-String callUploadSaniPhoto(const char* cameraID);
 
 // Logging function for workflow steps
-void logStep(const char* step) {
+void logStep(const char *step)
+{
   unsigned long timestamp = millis();
   Serial.print("[T:");
   Serial.print(timestamp);
@@ -34,50 +45,56 @@ void logStep(const char* step) {
   Serial.println(step);
 }
 
-String callUploadSaniPhoto(const char* cameraID) {
-  if (WiFi.status() != WL_CONNECTED) {
+String callUploadSaniPhoto(const char *cameraID, const char *imagePrefix)
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
     Serial.println("WiFi not connected!");
     return "Error: WiFi not connected";
   }
-  
+
   HTTPClient http;
-  http.begin("http://192.168.4.97:5000/uploadSaniPhoto"); // Server endpoint
+  String url = String(uploadServerURL) + "?camera_id=" + String(cameraID) + "&image_prefix=" + String(imagePrefix);
+  Serial.println("[HTTP] Connecting to: " + url);
+
+  http.begin(url);
   http.setTimeout(15000);
-  http.addHeader("Content-Type", "application/json");
-  
-  // Create JSON payload with camera_id
-  String jsonPayload = "{\"camera_id\":\"" + String(cameraID) + "\"}";
-  
-  Serial.print("Calling uploadSaniPhoto for camera: ");
-  Serial.println(cameraID);
-  
-  int httpResponseCode = http.POST(jsonPayload);
-  
+
+  int httpResponseCode = http.POST("");
   String response = "";
-  if (httpResponseCode > 0) {
+
+  Serial.println("[HTTP] Response code: " + String(httpResponseCode));
+
+  if (httpResponseCode > 0)
+  {
     response = http.getString();
-    Serial.print("Server response code: ");
-    Serial.println(httpResponseCode);
-  } else {
-    Serial.print("Server error: ");
-    Serial.println(httpResponseCode);
-    response = "API call failed with code: " + String(httpResponseCode);
+    Serial.println("[HTTP] Response body: " + response);
   }
-  
+  else
+  {
+    Serial.println("[HTTP] Connection failed: " + String(httpResponseCode));
+    response = "Connection failed: " + String(httpResponseCode);
+  }
+
   http.end();
   return response;
 }
 
 void updateFlushCount(int amount)
 {
-  if (amount != 0) {
+  if (amount != 0)
+  {
     flushCount += amount;
-    if (flushCount < 0) flushCount = 0;
-  } else {
+    if (flushCount < 0)
+      flushCount = 0;
+  }
+  else
+  {
     flushCount = _flushCount; // Sync with global counter
   }
   display.showNumberDec(flushCount, false);
-  if (amount != 0) {
+  if (amount != 0)
+  {
     logStep((String("Display updated - Flush count: ") + String(flushCount)).c_str());
   }
 }
@@ -111,7 +128,7 @@ static bool relayP2Active = false;
 #define RELAY_T1_PIN 37
 #define RELAY_T2_PIN 38
 
-void activateRelay(int pin, unsigned long duration, unsigned long* startTime, bool* activeFlag)
+void activateRelay(int pin, unsigned long duration, unsigned long *startTime, bool *activeFlag)
 {
   digitalWrite(pin, HIGH);
   *startTime = _currentTime;
@@ -120,26 +137,30 @@ void activateRelay(int pin, unsigned long duration, unsigned long* startTime, bo
 
 void updateRelays()
 {
-  if (relayT1Active && _currentTime - relayT1StartTime >= TOILET_FLUSH_HOLD_TIME_MS) {
+  if (relayT1Active && _currentTime - relayT1StartTime >= TOILET_FLUSH_HOLD_TIME_MS)
+  {
     digitalWrite(RELAY_T1_PIN, LOW);
     relayT1Active = false;
   }
-  if (relayT2Active && _currentTime - relayT2StartTime >= TOILET_FLUSH_HOLD_TIME_MS) {
+  if (relayT2Active && _currentTime - relayT2StartTime >= TOILET_FLUSH_HOLD_TIME_MS)
+  {
     digitalWrite(RELAY_T2_PIN, LOW);
     relayT2Active = false;
   }
-  if (relayP1Active && _currentTime - relayP1StartTime >= PUMP_RELAY_ACTIVE_TIME_MS) {
+  if (relayP1Active && _currentTime - relayP1StartTime >= PUMP_RELAY_ACTIVE_TIME_MS)
+  {
     digitalWrite(RELAY_P1_PIN, LOW);
     relayP1Active = false;
   }
-  if (relayP2Active && _currentTime - relayP2StartTime >= PUMP_RELAY_ACTIVE_TIME_MS) {
+  if (relayP2Active && _currentTime - relayP2StartTime >= PUMP_RELAY_ACTIVE_TIME_MS)
+  {
     digitalWrite(RELAY_P2_PIN, LOW);
     relayP2Active = false;
   }
 }
 
 // Utility method to draw images using drawPixel
-void drawImagePixels(int xPos, int yPos, int width, int height, const uint16_t* imageData, bool reflectVertically = false)
+void drawImagePixels(int xPos, int yPos, int width, int height, const uint16_t *imageData, bool reflectVertically = false)
 {
   for (int y = 0; y < height; y++)
   {
@@ -151,7 +172,6 @@ void drawImagePixels(int xPos, int yPos, int width, int height, const uint16_t* 
     }
   }
 }
-
 
 void drawSaniLogo()
 {
@@ -220,7 +240,7 @@ void drawHamburger()
   for (int i = 0; i < 3; i++)
   {
     int rectY = hamburgerY + (i * (rectHeight + spacing));
-    tft.fillRect(hamburgerX, rectY, rectWidth, rectHeight, tft.color565(16,92,169));
+    tft.fillRect(hamburgerX, rectY, rectWidth, rectHeight, tft.color565(16, 92, 169));
   }
 }
 
@@ -262,12 +282,15 @@ void drawCamera(Location location)
 void drawToilet(Location location)
 {
   int xPos = (location == Left) ? DEFAULT_PADDING : SCREEN_WIDTH - DEFAULT_PADDING - TOILET_WIDTH;
-  int yPos = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2);
+  int yPos = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) - 3;
 
-  if (location == Left) {
+  if (location == Left)
+  {
     _toiletLeftShape = new Rectangle("Left Toilet", xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT);
     _toiletLeftShape->printDetails();
-  } else {
+  }
+  else
+  {
     _toiletRightShape = new Rectangle("Right Toilet", xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT);
     _toiletRightShape->printDetails();
   }
@@ -280,13 +303,16 @@ void drawToilet(Location location)
     if (stage == 0)
     {
       drawImagePixels(xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT, Toilet_Full_85x105_01);
-    } else if (stage == 1)
+    }
+    else if (stage == 1)
     {
       drawImagePixels(xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT, Toilet_Full_85x105_02);
-    } else if (stage == 2)
+    }
+    else if (stage == 2)
     {
       drawImagePixels(xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT, Toilet_Full_85x105_03);
-    } else if (stage == 3)
+    }
+    else if (stage == 3)
     {
       drawImagePixels(xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT, Toilet_Full_85x105_04);
     }
@@ -299,30 +325,29 @@ void drawToilet(Location location)
   {
     drawImagePixels(xPos, yPos, TOILET_WIDTH, TOILET_HEIGHT, Toilet_Full_85x105_04);
   }
-  
+
   // Redraw timer after toilet to ensure it stays visible
   drawFlushTimer(location);
 }
 
 void drawFlushTimer(Location location)
 {
-  int xPos = (location == Left) ? DEFAULT_PADDING + (TOILET_WIDTH / 2) - 29 : 
-                 SCREEN_WIDTH - DEFAULT_PADDING - (TOILET_WIDTH / 2) - 29;
+  int xPos = (location == Left) ? DEFAULT_PADDING + (TOILET_WIDTH / 2) - 29 : SCREEN_WIDTH - DEFAULT_PADDING - (TOILET_WIDTH / 2) - 29;
 
-  int yPos = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + DEFAULT_PADDING + (DEFAULT_PADDING * 2) + 3;
+  int yPos = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + DEFAULT_PADDING + (DEFAULT_PADDING * 2) ;
 
   int minutes = (location == Left) ? _timerLeftMinutes : _timerRightMinutes;
   int seconds = (location == Left) ? _timerLeftSeconds : _timerRightSeconds;
 
   tft.setTextColor(ILI9341_BLACK, TFT_WHITE);
   tft.setTextSize(2);
-  
+
   // Draw minutes block
   char minutesStr[3];
   sprintf(minutesStr, "%02d", minutes);
   tft.setCursor(xPos, yPos);
   tft.print(minutesStr);
-  
+
   // Draw seconds block (with space gap)
   char secondsStr[3];
   sprintf(secondsStr, "%02d", seconds);
@@ -332,105 +357,231 @@ void drawFlushTimer(Location location)
 
 void drawWasteRepo(Location location)
 {
-  
-  int xPos = (location == Left) ? DEFAULT_PADDING + TOILET_WIDTH : 
-  SCREEN_WIDTH - DEFAULT_PADDING - TOILET_WIDTH - WASTE_REPO_WIDTH;
+
+  int xPos = (location == Left) ? DEFAULT_PADDING + TOILET_WIDTH : SCREEN_WIDTH - DEFAULT_PADDING - TOILET_WIDTH - WASTE_REPO_WIDTH;
   int yPos = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + DEFAULT_PADDING + TOILET_HEIGHT - WASTE_REPO_HEIGHT - 8;
 
-  if (location == Left) {
+  if (location == Left)
+  {
     _wasteRepoLeftShape = new Rectangle("Left Waste Repo", xPos, yPos, WASTE_REPO_WIDTH, WASTE_REPO_HEIGHT);
     _wasteRepoLeftShape->printDetails();
-  } else {
+  }
+  else
+  {
     _wasteRepoRightShape = new Rectangle("Right Waste Repo", xPos, yPos, WASTE_REPO_WIDTH, WASTE_REPO_HEIGHT);
     _wasteRepoRightShape->printDetails();
   }
 
   int stage = _animStates[WASTE_REPO][location].stage;
-  const uint16_t* wasteImages[] = {Waste_Repo_75x25_01, Waste_Repo_75x25_02, Waste_Repo_75x25_03, Waste_Repo_75x25_04};
+  const uint16_t *wasteImages[] = {Waste_Repo_75x25_01, Waste_Repo_75x25_02, Waste_Repo_75x25_03, Waste_Repo_75x25_04};
 
   // Always use image 01 when not animating or when stage is 0
-  if (!_animStates[WASTE_REPO][location].active || stage == 0) {
+  if (!_animStates[WASTE_REPO][location].active || stage == 0)
+  {
     drawImagePixels(xPos, yPos, WASTE_REPO_WIDTH, WASTE_REPO_HEIGHT, Waste_Repo_75x25_01, location == Left);
-  } else {
+  }
+  else
+  {
     // During animation, use stages 1-3 (images 02-04)
     int imageIndex = (stage >= 1 && stage <= 3) ? stage : 0;
     drawImagePixels(xPos, yPos, WASTE_REPO_WIDTH, WASTE_REPO_HEIGHT, wasteImages[imageIndex], location == Left);
   }
 }
 
+void drawFlushBar()
+{
+  int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
+  int barHeight = 10;
+  int barWidth = SCREEN_WIDTH - 10; // 5px margin each side
+  int barX = 5;
+  int barY = toiletBottomY + 2;
+  
+  // Draw black outline
+  tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
+  
+  // Fill with blue initially
+  tft.fillRect(barX, barY, barWidth, barHeight, ILI9341_BLUE);
+}
+
+void updateFlushBar()
+{
+  if (!_leftFlushActive) {
+    // Show empty bar when not flushing
+    int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
+    int barHeight = 10;
+    int barWidth = SCREEN_WIDTH - 10;
+    int barX = 5;
+    int barY = toiletBottomY + 2;
+    
+    tft.fillRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+    tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
+    return;
+  }
+  
+  int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
+  int barHeight = 10;
+  int barWidth = SCREEN_WIDTH - 10;
+  int barX = 5;
+  int barY = toiletBottomY + 2;
+  
+  // Calculate progress based on left flush timing
+  unsigned long elapsed = _currentTime - _leftFlushStartTime;
+  float progress = (float)elapsed / (float)FLUSH_DURATION_MS;
+  if (progress > 1.0) progress = 1.0;
+  
+  // Calculate how much should be white (consumed) - from right side
+  int whiteWidth = (int)(barWidth * progress);
+  
+  // Draw blue portion (remaining time) - from left
+  int blueWidth = barWidth - whiteWidth;
+  if (blueWidth > 0) {
+    tft.fillRect(barX, barY, blueWidth, barHeight, ILI9341_BLUE);
+  }
+  
+  // Draw white portion (consumed time) - from right
+  if (whiteWidth > 0) {
+    tft.fillRect(barX + blueWidth, barY, whiteWidth, barHeight, TFT_WHITE);
+  }
+  
+  // Redraw outline
+  tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
+}
+
+void drawFlowDetails()
+{
+  // Calculate position - moved down 15px for flush bar
+  int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT + 15;
+  int detailsHeight = SCREEN_HEIGHT - toiletBottomY;
+  int xPos = 0;
+  int width = SCREEN_WIDTH;
+
+  // Draw rectangle with border
+  tft.fillRect(xPos, toiletBottomY, width, detailsHeight, TFT_WHITE);
+  tft.drawRect(xPos, toiletBottomY, width, detailsHeight, ILI9341_BLACK);
+
+  // Display flow details
+  tft.setTextColor(ILI9341_BLACK);
+  tft.setTextSize(1);
+  
+  int yPos = toiletBottomY + 5;
+  
+  // Flush Count
+  tft.setCursor(5, yPos);
+  tft.print("Flush Count: " + String(_flushCount));
+  yPos += 10;
+  
+  // Waste Consumed (using current _pumpWasteDoseML setting)
+  int totalWasteOz = (_flushCount * _pumpWasteDoseML) / 30; // Convert ml to oz (1 oz ≈ 30ml)
+  tft.setCursor(5, yPos);
+  tft.print("Waste Consumed: " + String(totalWasteOz) + " oz");
+  yPos += 10;
+  
+  // Gallons Flushed (2 gallons per flush)
+  int totalGallons = _flushCount * 2;
+  tft.setCursor(5, yPos);
+  tft.print("Gallons Flushed: " + String(totalGallons));
+  yPos += 10;
+  
+  // Current Settings
+  tft.setCursor(5, yPos);
+  tft.print("--- Settings ---");
+  yPos += 10;
+  
+  // Flush Duration
+  tft.setCursor(5, yPos);
+  tft.print("Flush Duration: 60s");
+  yPos += 10;
+  
+  // Waste per Flush
+  tft.setCursor(5, yPos);
+  tft.print("Waste/Flush: " + String(_pumpWasteDoseML) + "ml");
+  yPos += 10;
+  
+  // Waste Pump Delay
+  tft.setCursor(5, yPos);
+  tft.print("Pump Delay: " + String(_wasteRepoTriggerDelayMs/1000) + "s");
+}
+
+
+
+
+
 void drawMainDisplay()
 {
   Serial.println("=== DRAWING MAIN DISPLAY ===");
   tft.fillScreen(TFT_WHITE);
   Serial.println("Screen filled with white");
-  
+
   Serial.println("Drawing hamburger...");
   drawHamburger();
-  delay(10); // Small delay to prevent watchdog
-  
+
   Serial.println("Drawing logo...");
   drawSaniLogo();
-  delay(10);
-  
+
   Serial.println("Drawing start/stop button...");
   drawStartStopButton();
-  delay(10);
-  
+
   Serial.println("Drawing cameras...");
   drawCamera(Left);
-  delay(10);
   drawCamera(Right);
-  delay(10);
-  
+
   Serial.println("Drawing toilets...");
   drawToilet(Left);
-  delay(10);
   drawToilet(Right);
-  delay(10);
-  
+
   Serial.println("Drawing waste repos...");
   drawWasteRepo(Left);
-  delay(10);
   drawWasteRepo(Right);
-  delay(10);
-  
+
   Serial.println("Drawing timers...");
   drawFlushTimer(Left);
-  delay(10);
   drawFlushTimer(Right);
-  delay(10);
+
+  Serial.println("Drawing flush bar...");
+  drawFlushBar();
   
+  Serial.println("Drawing flow details...");
+  drawFlowDetails();
+
   Serial.println("=== MAIN DISPLAY COMPLETE ===");
 }
 
 void updateAnimations()
 {
   // Safety check - only update animations if they should be active
-  if (_flushLeft || _animStates[TOILET][Left].active) {
+  if (_flushLeft || _animStates[TOILET][Left].active)
+  {
     updateToiletAnimation(Left);
   }
-  if (_flushRight || _animStates[TOILET][Right].active) {
+  if (_flushRight || _animStates[TOILET][Right].active)
+  {
     updateToiletAnimation(Right);
   }
-  if (_flashCameraLeft || _animStates[CAMERA][Left].active) {
+  if (_flashCameraLeft || _animStates[CAMERA][Left].active)
+  {
     updateCameraFlashAnimation(Left);
   }
-  if (_flashCameraRight || _animStates[CAMERA][Right].active) {
+  if (_flashCameraRight || _animStates[CAMERA][Right].active)
+  {
     updateCameraFlashAnimation(Right);
   }
-  if (_animateWasteRepoLeft || _animStates[WASTE_REPO][Left].active) {
+  if (_animateWasteRepoLeft || _animStates[WASTE_REPO][Left].active)
+  {
     updateWasteRepoAnimation(Left);
   }
-  if (_animateWasteRepoRight || _animStates[WASTE_REPO][Right].active) {
+  if (_animateWasteRepoRight || _animStates[WASTE_REPO][Right].active)
+  {
     updateWasteRepoAnimation(Right);
   }
-  
+
   // Always update timers and relays (they have their own safety checks)
   updateTimers();
   updateRelays();
-  
+  updateFlushBar();
+
   // Only update flush flow if it's active
-  if (_flushFlowActive) {
+  if (_flushFlowActive)
+  {
     updateFlushFlow();
   }
 }
@@ -439,16 +590,16 @@ void initializeFlushFlow()
 {
   _flushFlowActive = true;
   _flushFlowStartTime = _currentTime;
-  
+
   logStep("3. Starting left toilet flush");
   flushToilet(Left);
-  
+
   logStep("Starting timers");
   _timerLeftRunning = true;
   _timerLeftStartTime = _currentTime;
   _timerLeftMinutes = 0;
   _timerLeftSeconds = 0;
-  
+
   // Start right timer with delay
   _timerRightRunning = true;
   _timerRightStartTime = _currentTime + RIGHT_TOILET_FLUSH_DELAY_MS;
@@ -458,103 +609,132 @@ void initializeFlushFlow()
 
 void flushToilet(Location location)
 {
-  const char* side = (location == Left) ? "Left" : "Right";
+  const char *side = (location == Left) ? "Left" : "Right";
   logStep((String("Activating ") + side + " toilet flush").c_str());
-  
-  if (location == Left) {
+
+  if (location == Left)
+  {
     _leftFlushActive = true;
     _leftFlushStartTime = _currentTime;
     _flushLeft = true;
-    activateRelay(RELAY_T1_PIN, _flushTotalDurationMs, &relayT1StartTime, &relayT1Active);
-  } else {
+    activateRelay(RELAY_T1_PIN, FLUSH_DURATION_MS, &relayT1StartTime, &relayT1Active);
+  }
+  else
+  {
     _rightFlushActive = true;
     _rightFlushStartTime = _currentTime;
     _flushRight = true;
-    activateRelay(RELAY_T2_PIN, _flushTotalDurationMs, &relayT2StartTime, &relayT2Active);
+    activateRelay(RELAY_T2_PIN, FLUSH_DURATION_MS, &relayT2StartTime, &relayT2Active);
   }
 }
 
 void updateFlushFlow()
 {
-  if (!_flushFlowActive) return;
-  
+  if (!_flushFlowActive)
+    return;
+
   // Check left flush triggers
-  if (_leftFlushActive) {
+  if (_leftFlushActive)
+  {
     unsigned long leftElapsed = _currentTime - _leftFlushStartTime;
-    
+
     // Trigger waste repo after delay (one-time only)
-    if (leftElapsed >= _wasteRepoTriggerDelayMs && !_animateWasteRepoLeft && !wasteRepoLeftTriggered) {
+    if (leftElapsed >= _wasteRepoTriggerDelayMs && !_animateWasteRepoLeft && !wasteRepoLeftTriggered)
+    {
       logStep("5. Activating left waste repo");
       _animateWasteRepoLeft = true;
-      wasteRepoLeftTriggered = true;  // Prevent re-triggering
+      wasteRepoLeftTriggered = true; // Prevent re-triggering
     }
-    
+
     // End left flush and increment counter after 60 seconds
-    if (leftElapsed >= _flushTotalDurationMs) {
+    if (leftElapsed >= FLUSH_DURATION_MS)
+    {
       _leftFlushActive = false;
-      wasteRepoLeftTriggered = false;  // Reset for next cycle
+      wasteRepoLeftTriggered = false; // Reset for next cycle
       _flushCount++;
       logStep((String("Left flush completed - Flush count incremented to: ") + String(_flushCount)).c_str());
       updateFlushCount(0); // Update 7-digit display
-      
+
       // Trigger camera only after flush completes and every 3rd flush
-      if ((_flushCount % _flushCountForCamera == 0) && !_flashCameraLeft) {
+      if ((_flushCount % _flushCountForCameraCapture == 0) && !_flashCameraLeft)
+      {
         logStep("4. Taking left camera picture");
         _flashCameraLeft = true;
-        
-        // Auto-capture from left camera (every 3 flushes)
-        Serial.println("Auto-capturing from left camera (every 3 flushes)");
-        String serverResponse = callUploadSaniPhoto(leftCameraID);
-        Serial.println("Server response: " + serverResponse);
-        Serial.println("Image saved to: D:\\esp32_cam_captures\\" + String(leftCameraID) + "_[timestamp].jpg");
+        // HTTP call will happen after animation completes
       }
+
+      // Reset left timer for next cycle
+      _timerLeftStartTime = _currentTime + (_flushTotalTimeLapseMin * 60000);
+      _timerLeftMinutes = 0;
+      _timerLeftSeconds = 0;
       
-      // Restart left toilet immediately for continuous cycle
-      logStep("Restarting left toilet flush for next cycle");
-      flushToilet(Left);
+      // Schedule left toilet restart after time lapse
+      logStep("Scheduling left toilet flush restart after time lapse");
     }
   }
-  
+
   // Check right flush triggers
-  if (_rightFlushActive) {
+  if (_rightFlushActive)
+  {
     unsigned long rightElapsed = _currentTime - _rightFlushStartTime;
-    
+
     // Trigger waste repo after delay (one-time only)
-    if (rightElapsed >= _wasteRepoTriggerDelayMs && !_animateWasteRepoRight && !wasteRepoRightTriggered) {
+    if (rightElapsed >= _wasteRepoTriggerDelayMs && !_animateWasteRepoRight && !wasteRepoRightTriggered)
+    {
       logStep("5. Activating right waste repo");
       _animateWasteRepoRight = true;
-      wasteRepoRightTriggered = true;  // Prevent re-triggering
+      wasteRepoRightTriggered = true; // Prevent re-triggering
     }
-    
+
     // End right flush after 60 seconds (no counter increment)
-    if (rightElapsed >= _flushTotalDurationMs) {
+    if (rightElapsed >= FLUSH_DURATION_MS)
+    {
       _rightFlushActive = false;
-      wasteRepoRightTriggered = false;  // Reset for next cycle
+      wasteRepoRightTriggered = false; // Reset for next cycle
       logStep("Right flush completed");
-      
+
       // Trigger camera only after flush completes and every 3rd flush
-      if ((_flushCount % _flushCountForCamera == 0) && !_flashCameraRight) {
+      if ((_flushCount % _flushCountForCameraCapture == 0) && !_flashCameraRight)
+      {
         logStep("4. Taking right camera picture");
         _flashCameraRight = true;
-        
-        // Auto-capture from right camera (every 3 flushes)
-        Serial.println("Auto-capturing from right camera (every 3 flushes)");
-        String serverResponse = callUploadSaniPhoto(rightCameraID);
-        Serial.println("Server response: " + serverResponse);
-        Serial.println("Image saved to: D:\\esp32_cam_captures\\" + String(rightCameraID) + "_[timestamp].jpg");
+        // HTTP call will happen after animation completes
       }
+
+      // Reset right timer for next cycle
+      _timerRightStartTime = _currentTime + (_flushTotalTimeLapseMin * 60000) + RIGHT_TOILET_FLUSH_DELAY_MS;
+      _timerRightMinutes = 0;
+      _timerRightSeconds = 0;
       
-      // Restart right toilet after delay for continuous cycle
-      logStep("Scheduling right toilet flush restart after delay");
-      // Right toilet will restart via the existing delay logic below
+      // Schedule right toilet restart after time lapse + delay
+      logStep("Scheduling right toilet flush restart after time lapse + delay");
     }
   }
-  
-  // Check if it's time to start right flush (independent of left)
-  if (_flushFlowActive && !_rightFlushActive && 
-      _currentTime - _flushFlowStartTime >= RIGHT_TOILET_FLUSH_DELAY_MS) {
+
+  // Check if it's time to start right flush (initial start)
+  if (_flushFlowActive && !_rightFlushActive &&
+      _currentTime - _flushFlowStartTime >= RIGHT_TOILET_FLUSH_DELAY_MS)
+  {
     logStep("Starting right toilet flush after delay");
     flushToilet(Right);
+  }
+  
+  // Check if it's time to restart left flush after time lapse
+  if (_flushFlowActive && !_leftFlushActive && _timerLeftRunning &&
+      _currentTime >= _timerLeftStartTime)
+  {
+    logStep("Restarting left toilet flush after time lapse");
+    flushToilet(Left);
+    _timerLeftStartTime = _currentTime; // Reset timer start
+  }
+  
+  // Check if it's time to restart right flush after time lapse + delay
+  if (_flushFlowActive && !_rightFlushActive && _timerRightRunning &&
+      _currentTime >= _timerRightStartTime)
+  {
+    logStep("Restarting right toilet flush after time lapse + delay");
+    flushToilet(Right);
+    _timerRightStartTime = _currentTime; // Reset timer start
   }
 }
 
@@ -570,11 +750,14 @@ void updateToiletAnimation(Location location)
     anim->lastTime = _currentTime;
     AnimationType *lastAnim = (location == Left) ? &lastAnimationLeft : &lastAnimationRight;
     *lastAnim = TOILET;
-    
+
     // Activate toilet relay
-    if (location == Left) {
+    if (location == Left)
+    {
       activateRelay(RELAY_T1_PIN, TOILET_FLUSH_HOLD_TIME_MS, &relayT1StartTime, &relayT1Active);
-    } else {
+    }
+    else
+    {
       activateRelay(RELAY_T2_PIN, TOILET_FLUSH_HOLD_TIME_MS, &relayT2StartTime, &relayT2Active);
     }
   }
@@ -585,7 +768,7 @@ void updateToiletAnimation(Location location)
     {
       anim->stage++;
       anim->lastTime = _currentTime;
-      
+
       if (anim->stage >= TOILET_ANIM_TOTAL_STAGES)
       {
         anim->stage = 0;
@@ -619,32 +802,61 @@ void updateCameraFlashAnimation(Location location)
   {
     anim->stage++;
     anim->lastTime = _currentTime;
-    
-    if (anim->stage == 2) {
+
+    if (anim->stage == 2)
+    {
       int rayLength = 3;
       tft.drawLine(centerX - rayLength, centerY, centerX + rayLength, centerY, flashColor);
       tft.drawLine(centerX, centerY - rayLength, centerX, centerY + rayLength, flashColor);
-      tft.drawLine(centerX - rayLength/2, centerY - rayLength/2, centerX + rayLength/2, centerY + rayLength/2, flashColor);
-      tft.drawLine(centerX - rayLength/2, centerY + rayLength/2, centerX + rayLength/2, centerY - rayLength/2, flashColor);
-    } else if (anim->stage == 3) {
+      tft.drawLine(centerX - rayLength / 2, centerY - rayLength / 2, centerX + rayLength / 2, centerY + rayLength / 2, flashColor);
+      tft.drawLine(centerX - rayLength / 2, centerY + rayLength / 2, centerX + rayLength / 2, centerY - rayLength / 2, flashColor);
+    }
+    else if (anim->stage == 3)
+    {
       int rayLength = 6;
       tft.drawLine(centerX - rayLength, centerY, centerX + rayLength, centerY, flashColor);
       tft.drawLine(centerX, centerY - rayLength, centerX, centerY + rayLength, flashColor);
-      tft.drawLine(centerX - rayLength/2, centerY - rayLength/2, centerX + rayLength/2, centerY + rayLength/2, flashColor);
-      tft.drawLine(centerX - rayLength/2, centerY + rayLength/2, centerX + rayLength/2, centerY - rayLength/2, flashColor);
-    } else if (anim->stage == 4) {
+      tft.drawLine(centerX - rayLength / 2, centerY - rayLength / 2, centerX + rayLength / 2, centerY + rayLength / 2, flashColor);
+      tft.drawLine(centerX - rayLength / 2, centerY + rayLength / 2, centerX + rayLength / 2, centerY - rayLength / 2, flashColor);
+    }
+    else if (anim->stage == 4)
+    {
       int rayLength = 10;
       tft.drawLine(centerX - rayLength, centerY, centerX + rayLength, centerY, flashColor);
       tft.drawLine(centerX, centerY - rayLength, centerX, centerY + rayLength, flashColor);
-      tft.drawLine(centerX - rayLength/2, centerY - rayLength/2, centerX + rayLength/2, centerY + rayLength/2, flashColor);
-      tft.drawLine(centerX - rayLength/2, centerY + rayLength/2, centerX + rayLength/2, centerY - rayLength/2, flashColor);
+      tft.drawLine(centerX - rayLength / 2, centerY - rayLength / 2, centerX + rayLength / 2, centerY + rayLength / 2, flashColor);
+      tft.drawLine(centerX - rayLength / 2, centerY + rayLength / 2, centerX + rayLength / 2, centerY - rayLength / 2, flashColor);
       tft.fillCircle(centerX, centerY, 3, flashColor);
-    } else if (anim->stage >= CAMERA_FLASH_TOTAL_STAGES) {
+    }
+    else if (anim->stage >= CAMERA_FLASH_TOTAL_STAGES)
+    {
       anim->stage = 0;
       anim->active = false;
       *flashFlag = false;
       tft.fillRect(cameraX, cameraY, CAMERA_WIDTH, CAMERA_HEIGHT, TFT_WHITE);
       drawCamera(location);
+
+      // Make HTTP call after animation completes (for both manual and auto)
+      const char *cameraID = (location == Left) ? leftCameraID : rightCameraID;
+      const char *locationStr = (location == Left) ? "left_" : "right_";
+      
+      // Use flush count for auto captures, 0000 for manual
+      String imagePrefix;
+      if (_flushCount % _flushCountForCameraCapture == 0 && _flushFlowActive) {
+        char flushStr[4];
+        sprintf(flushStr, "%03d", _flushCount);
+        imagePrefix = String(locationStr) + String(flushStr);
+        Serial.println("Auto-capturing from camera (every 3 flushes)");
+      } else {
+        imagePrefix = String(locationStr) + "0000";
+        Serial.println("Manual camera capture");
+      }
+      
+      String serverResponse = callUploadSaniPhoto(cameraID, imagePrefix.c_str());
+      Serial.println("Server response: " + serverResponse);
+      
+      // Update flow details after capture
+      drawFlowDetails();
     }
   }
 }
@@ -655,18 +867,19 @@ static unsigned long wasteRepoRightStartTime = 0;
 static bool wasteRepoLeftActive = false;
 static bool wasteRepoRightActive = false;
 
-void resetWasteRepoStates() {
+void resetWasteRepoStates()
+{
   wasteRepoLeftActive = false;
   wasteRepoRightActive = false;
   wasteRepoLeftStartTime = 0;
   wasteRepoRightStartTime = 0;
   wasteRepoCompletedLeft = false;
   wasteRepoCompletedRight = false;
-  
+
   // Reset one-time trigger flags
   wasteRepoLeftTriggered = false;
   wasteRepoRightTriggered = false;
-  
+
   // Reset relay states
   relayT1Active = false;
   relayT2Active = false;
@@ -687,10 +900,10 @@ void updateWasteRepoAnimation(Location location)
 
   if (*animateFlag && !*activeFlag)
   {
-    const char* side = (location == Left) ? "Left" : "Right";
+    const char *side = (location == Left) ? "Left" : "Right";
     logStep((String(side) + " waste repo animation and relay started").c_str());
     logStep((String("PUMP_RELAY_ACTIVE_TIME_MS = ") + String(PUMP_RELAY_ACTIVE_TIME_MS)).c_str());
-    
+
     *activeFlag = true;
     anim->active = true;
     anim->stage = 0;
@@ -698,11 +911,14 @@ void updateWasteRepoAnimation(Location location)
     *startTime = _currentTime;
     AnimationType *lastAnim = (location == Left) ? &lastAnimationLeft : &lastAnimationRight;
     *lastAnim = WASTE_REPO;
-    
+
     // Activate pump relay
-    if (location == Left) {
+    if (location == Left)
+    {
       activateRelay(RELAY_P1_PIN, PUMP_RELAY_ACTIVE_TIME_MS, &relayP1StartTime, &relayP1Active);
-    } else {
+    }
+    else
+    {
       activateRelay(RELAY_P2_PIN, PUMP_RELAY_ACTIVE_TIME_MS, &relayP2StartTime, &relayP2Active);
     }
   }
@@ -710,43 +926,44 @@ void updateWasteRepoAnimation(Location location)
   if (*activeFlag && anim->active)
   {
     unsigned long elapsed = _currentTime - *startTime;
-    
+
     // Check if animation should stop after PUMP_RELAY_ACTIVE_TIME_MS
     if (elapsed >= PUMP_RELAY_ACTIVE_TIME_MS)
     {
-      const char* side = (location == Left) ? "Left" : "Right";
+      const char *side = (location == Left) ? "Left" : "Right";
       String msg = String(side) + " waste repo animation and relay completed after " + String(elapsed) + "ms";
       logStep(msg.c_str());
-      
+
       *activeFlag = false;
       anim->active = false;
       *animateFlag = false;
       drawToilet(location); // Update toilet to show final state (stage 5)
       return;
     }
-    
+
     // Continue animation stages (5 steps: 01->02->03->04->01, 400ms each)
     if (_currentTime - anim->lastTime >= WASTE_REPO_ANIM_STAGE_DURATION_MS)
     {
       anim->stage++;
       anim->lastTime = _currentTime;
-      const char* side = (location == Left) ? "Left" : "Right";
+      const char *side = (location == Left) ? "Left" : "Right";
       String msg = String(side) + " waste repo stage " + String(anim->stage + 1) + "/5, elapsed: " + String(elapsed) + "ms";
       logStep(msg.c_str());
-      
+
       // Stop after 5 stages (01->02->03->04->01)
-      if (anim->stage >= WASTE_REPO_ANIM_TOTAL_STAGES) {
+      if (anim->stage >= WASTE_REPO_ANIM_TOTAL_STAGES)
+      {
         String endMsg = String(side) + " waste repo animation completed - 5 stages finished";
         logStep(endMsg.c_str());
         *activeFlag = false;
         anim->active = false;
         *animateFlag = false;
-        anim->stage = 0; // Reset to stage 0 (image 01)
+        anim->stage = 0;         // Reset to stage 0 (image 01)
         drawWasteRepo(location); // Draw final default image (01)
-        drawToilet(location); // Update toilet to show final state
+        drawToilet(location);    // Update toilet to show final state
         return;
       }
-      
+
       drawWasteRepo(location);
     }
   }
@@ -759,9 +976,10 @@ void toggleTimers()
     logStep("2. Switching button from triangle to square");
     _drawTriangle = false; // Switch to square
     drawStartStopButton();
-    
+
     logStep("3. Starting timer sequences");
     initializeFlushFlow();
+    drawFlushBar(); // Initialize flush bar
   }
   else // Square visible = pause/stop when clicked
   {
@@ -769,14 +987,14 @@ void toggleTimers()
     logStep("Switching button from square to triangle");
     _drawTriangle = true; // Switch to triangle
     drawStartStopButton();
-    
+
     logStep("Stopping flush flow and timers");
     _flushFlowActive = false;
-    _leftFlushActive = false;   // CRITICAL FIX: Prevents updateFlushFlow from re-triggering
-    _rightFlushActive = false;  // CRITICAL FIX: Prevents updateFlushFlow from re-triggering
+    _leftFlushActive = false;  // CRITICAL FIX: Prevents updateFlushFlow from re-triggering
+    _rightFlushActive = false; // CRITICAL FIX: Prevents updateFlushFlow from re-triggering
     _timerLeftRunning = false;
     _timerRightRunning = false;
-    
+
     // Reset animation states and stages
     _animStates[TOILET][Left].active = false;
     _animStates[TOILET][Left].stage = 0;
@@ -790,7 +1008,7 @@ void toggleTimers()
     _animStates[WASTE_REPO][Left].stage = 0;
     _animStates[WASTE_REPO][Right].active = false;
     _animStates[WASTE_REPO][Right].stage = 0;
-    
+
     // Reset flags
     _flushLeft = false;
     _flushRight = false;
@@ -798,16 +1016,16 @@ void toggleTimers()
     _flashCameraRight = false;
     _animateWasteRepoLeft = false;
     _animateWasteRepoRight = false;
-    
+
     // Reset waste repo timing variables
     resetWasteRepoStates();
-    
+
     // Turn off all relays immediately
     digitalWrite(RELAY_P1_PIN, LOW);
     digitalWrite(RELAY_P2_PIN, LOW);
     digitalWrite(RELAY_T1_PIN, LOW);
     digitalWrite(RELAY_T2_PIN, LOW);
-    
+
     // Redraw main display to reset visual state
     drawMainDisplay();
   }
@@ -821,7 +1039,7 @@ void updateTimers()
     unsigned long elapsed = (_currentTime - _timerLeftStartTime) / 1000; // Convert to seconds
     _timerLeftMinutes = elapsed / 60;
     _timerLeftSeconds = elapsed % 60;
-    
+
     // Reset at 99 minutes
     if (_timerLeftMinutes >= 99)
     {
@@ -830,7 +1048,7 @@ void updateTimers()
       _timerLeftStartTime = _currentTime;
     }
   }
-  
+
   // Update right timer (with delay check)
   if (_timerRightRunning)
   {
@@ -839,7 +1057,7 @@ void updateTimers()
       unsigned long elapsed = (_currentTime - _timerRightStartTime) / 1000; // Convert to seconds
       _timerRightMinutes = elapsed / 60;
       _timerRightSeconds = elapsed % 60;
-      
+
       // Reset at 99 minutes
       if (_timerRightMinutes >= 99)
       {
@@ -855,14 +1073,14 @@ void updateTimers()
       _timerRightSeconds = 0;
     }
   }
-  
+
   // Redraw timers if seconds have changed
   if (_timerLeftSeconds != _lastLeftSeconds)
   {
     _lastLeftSeconds = _timerLeftSeconds;
     drawFlushTimer(Left);
   }
-  
+
   if (_timerRightSeconds != _lastRightSeconds)
   {
     _lastRightSeconds = _timerRightSeconds;
