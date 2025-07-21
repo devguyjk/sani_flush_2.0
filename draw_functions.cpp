@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <TJpg_Decoder.h>
+
 #include "sani_flush_logo_165x40.h"
 #include "Toilet_Full_85x105_01.h"
 #include "Toilet_Full_85x105_02.h"
@@ -392,8 +393,8 @@ void drawFlushBar()
 {
   int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
   int barHeight = 10;
-  int barWidth = SCREEN_WIDTH - 10; // 5px margin each side
-  int barX = 5;
+  int barWidth = TOILET_WIDTH; // Same width as toilet image
+  int barX = DEFAULT_PADDING; // Same X position as toilet
   int barY = toiletBottomY + 2;
   
   // Draw black outline
@@ -405,42 +406,66 @@ void drawFlushBar()
 
 void updateFlushBar()
 {
-  if (!_leftFlushActive) {
-    // Show empty bar when not flushing
-    int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
-    int barHeight = 10;
-    int barWidth = SCREEN_WIDTH - 10;
-    int barX = 5;
-    int barY = toiletBottomY + 2;
-    
-    tft.fillRect(barX, barY, barWidth, barHeight, TFT_WHITE);
-    tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
-    return;
-  }
-  
   int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
   int barHeight = 10;
-  int barWidth = SCREEN_WIDTH - 10;
-  int barX = 5;
+  int barWidth = TOILET_WIDTH; // Same width as toilet image
+  int barX = DEFAULT_PADDING; // Same X position as toilet
   int barY = toiletBottomY + 2;
+  
+  // Always start with a clean bar
+  tft.fillRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+  tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
+  
+  if (!_leftFlushActive) {
+    // If not flushing, just leave the bar white
+    return;
+  }
   
   // Calculate progress based on left flush timing
   unsigned long elapsed = _currentTime - _leftFlushStartTime;
   float progress = (float)elapsed / (float)FLUSH_DURATION_MS;
   if (progress > 1.0) progress = 1.0;
   
-  // Calculate how much should be white (consumed) - from right side
-  int whiteWidth = (int)(barWidth * progress);
+  // Calculate how much should be blue (remaining time) - from left
+  int blueWidth = (int)(barWidth * (1.0 - progress));
   
   // Draw blue portion (remaining time) - from left
-  int blueWidth = barWidth - whiteWidth;
   if (blueWidth > 0) {
     tft.fillRect(barX, barY, blueWidth, barHeight, ILI9341_BLUE);
   }
   
-  // Draw white portion (consumed time) - from right
-  if (whiteWidth > 0) {
-    tft.fillRect(barX + blueWidth, barY, whiteWidth, barHeight, TFT_WHITE);
+  // Redraw outline
+  tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
+}
+
+void drawRightFlushBar()
+{
+  int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT;
+  int barHeight = 10;
+  int barWidth = TOILET_WIDTH; // Same width as toilet image
+  int barX = SCREEN_WIDTH - DEFAULT_PADDING - TOILET_WIDTH; // Same X position as toilet
+  int barY = toiletBottomY + 2; // Same Y position as left bar
+  
+  // Always start with a clean bar
+  tft.fillRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+  tft.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, ILI9341_BLACK);
+  
+  if (!_rightFlushActive) {
+    // If not flushing, just leave the bar white
+    return;
+  }
+  
+  // Calculate progress based on right flush timing
+  unsigned long elapsed = _currentTime - _rightFlushStartTime;
+  float progress = (float)elapsed / (float)FLUSH_DURATION_MS;
+  if (progress > 1.0) progress = 1.0;
+  
+  // Calculate how much should be blue (remaining time) - from left
+  int blueWidth = (int)(barWidth * (1.0 - progress));
+  
+  // Draw blue portion (remaining time) - from left
+  if (blueWidth > 0) {
+    tft.fillRect(barX, barY, blueWidth, barHeight, ILI9341_BLUE);
   }
   
   // Redraw outline
@@ -449,7 +474,7 @@ void updateFlushBar()
 
 void drawFlowDetails()
 {
-  // Calculate position - moved down 15px for flush bar
+  // Calculate position - moved up since bars are now side by side
   int toiletBottomY = LOGO_HEIGHT + DEFAULT_PADDING + CAMERA_HEIGHT + (DEFAULT_PADDING * 2) + TOILET_HEIGHT + 15;
   int detailsHeight = SCREEN_HEIGHT - toiletBottomY;
   int xPos = 0;
@@ -471,9 +496,9 @@ void drawFlowDetails()
   yPos += 10;
   
   // Waste Consumed (using current _pumpWasteDoseML setting)
-  int totalWasteOz = (_flushCount * _pumpWasteDoseML) / 30; // Convert ml to oz (1 oz ≈ 30ml)
+  int totalWasteML = _flushCount * _pumpWasteDoseML;
   tft.setCursor(5, yPos);
-  tft.print("Waste Consumed: " + String(totalWasteOz) + " oz");
+  tft.print("Waste Consumed: " + String(totalWasteML) + " ml");
   yPos += 10;
   
   // Gallons Flushed (2 gallons per flush)
@@ -537,8 +562,9 @@ void drawMainDisplay()
   drawFlushTimer(Left);
   drawFlushTimer(Right);
 
-  Serial.println("Drawing flush bar...");
+  Serial.println("Drawing flush bars...");
   drawFlushBar();
+  drawRightFlushBar();
   
   Serial.println("Drawing flow details...");
   drawFlowDetails();
@@ -578,6 +604,7 @@ void updateAnimations()
   updateTimers();
   updateRelays();
   updateFlushBar();
+  drawRightFlushBar();
 
   // Only update flush flow if it's active
   if (_flushFlowActive)
@@ -646,15 +673,17 @@ void updateFlushFlow()
       wasteRepoLeftTriggered = true; // Prevent re-triggering
     }
 
-    // End left flush and increment counter after 60 seconds
+    // End left flush after 60 seconds
     if (leftElapsed >= FLUSH_DURATION_MS)
     {
       _leftFlushActive = false;
       wasteRepoLeftTriggered = false; // Reset for next cycle
-      _flushCount++;
-      logStep((String("Left flush completed - Flush count incremented to: ") + String(_flushCount)).c_str());
-      updateFlushCount(0); // Update 7-digit display
+      logStep("Left flush completed");
 
+      // Reset left timer to 0 after flush completes
+      _timerLeftMinutes = 0;
+      _timerLeftSeconds = 0;
+      
       // Trigger camera only after flush completes and every 3rd flush
       if ((_flushCount % _flushCountForCameraCapture == 0) && !_flashCameraLeft)
       {
@@ -663,12 +692,10 @@ void updateFlushFlow()
         // HTTP call will happen after animation completes
       }
 
-      // Reset left timer for next cycle
-      _timerLeftStartTime = _currentTime + (_flushTotalTimeLapseMin * 60000);
-      _timerLeftMinutes = 0;
-      _timerLeftSeconds = 0;
-      
       // Schedule left toilet restart after time lapse
+      // Set start time to 2 seconds in the future to allow timer to display 00:00 briefly
+      _timerLeftStartTime = _currentTime + 2000;
+      
       logStep("Scheduling left toilet flush restart after time lapse");
     }
   }
@@ -686,14 +713,25 @@ void updateFlushFlow()
       wasteRepoRightTriggered = true; // Prevent re-triggering
     }
 
-    // End right flush after 60 seconds (no counter increment)
+    // End right flush after 60 seconds and increment counter
     if (rightElapsed >= FLUSH_DURATION_MS)
     {
       _rightFlushActive = false;
       wasteRepoRightTriggered = false; // Reset for next cycle
-      logStep("Right flush completed");
+      
+      // Increment flush count when right toilet completes
+      _flushCount++;
+      logStep((String("Right flush completed - Flush count incremented to: ") + String(_flushCount)).c_str());
+      updateFlushCount(1); // Increment 4-digit display by 1
 
-      // Trigger camera only after flush completes and every 3rd flush
+      // Update flow details to reflect new flush count
+      drawFlowDetails();
+
+      // Reset right timer to 0 after flush completes
+      _timerRightMinutes = 0;
+      _timerRightSeconds = 0;
+      
+      // Trigger camera only after flush completes and every 3rd flush - completely separate from flush count
       if ((_flushCount % _flushCountForCameraCapture == 0) && !_flashCameraRight)
       {
         logStep("4. Taking right camera picture");
@@ -702,9 +740,8 @@ void updateFlushFlow()
       }
 
       // Reset right timer for next cycle
-      _timerRightStartTime = _currentTime + (_flushTotalTimeLapseMin * 60000) + RIGHT_TOILET_FLUSH_DELAY_MS;
-      _timerRightMinutes = 0;
-      _timerRightSeconds = 0;
+      // Set start time to 2 seconds in the future to allow timer to display 00:00 briefly
+      _timerRightStartTime = _currentTime + 2000 + (_flushTotalTimeLapseMin * 60000) + RIGHT_TOILET_FLUSH_DELAY_MS;
       
       // Schedule right toilet restart after time lapse + delay
       logStep("Scheduling right toilet flush restart after time lapse + delay");
@@ -720,12 +757,14 @@ void updateFlushFlow()
   }
   
   // Check if it's time to restart left flush after time lapse
-  if (_flushFlowActive && !_leftFlushActive && _timerLeftRunning &&
-      _currentTime >= _timerLeftStartTime)
+  if (_flushFlowActive && !_leftFlushActive && _timerLeftRunning)
   {
-    logStep("Restarting left toilet flush after time lapse");
-    flushToilet(Left);
-    _timerLeftStartTime = _currentTime; // Reset timer start
+    unsigned long elapsed = (_currentTime - _timerLeftStartTime) / 1000;
+    if (elapsed >= (_flushTotalTimeLapseMin * 60))
+    {
+      logStep("Restarting left toilet flush after time lapse");
+      flushToilet(Left);
+    }
   }
   
   // Check if it's time to restart right flush after time lapse + delay
@@ -854,9 +893,6 @@ void updateCameraFlashAnimation(Location location)
       
       String serverResponse = callUploadSaniPhoto(cameraID, imagePrefix.c_str());
       Serial.println("Server response: " + serverResponse);
-      
-      // Update flow details after capture
-      drawFlowDetails();
     }
   }
 }
@@ -1033,47 +1069,92 @@ void toggleTimers()
 
 void updateTimers()
 {
-  // Update left timer
+  // Update left timer - count down from flush duration
   if (_timerLeftRunning)
   {
-    unsigned long elapsed = (_currentTime - _timerLeftStartTime) / 1000; // Convert to seconds
-    _timerLeftMinutes = elapsed / 60;
-    _timerLeftSeconds = elapsed % 60;
-
-    // Reset at 99 minutes
-    if (_timerLeftMinutes >= 99)
+    if (_leftFlushActive)
     {
-      _timerLeftMinutes = 0;
-      _timerLeftSeconds = 0;
-      _timerLeftStartTime = _currentTime;
-    }
-  }
-
-  // Update right timer (with delay check)
-  if (_timerRightRunning)
-  {
-    if (_currentTime >= _timerRightStartTime) // Only start counting after delay
-    {
-      unsigned long elapsed = (_currentTime - _timerRightStartTime) / 1000; // Convert to seconds
-      _timerRightMinutes = elapsed / 60;
-      _timerRightSeconds = elapsed % 60;
-
-      // Reset at 99 minutes
-      if (_timerRightMinutes >= 99)
+      // During flush - count down from 60 seconds
+      unsigned long elapsed = (_currentTime - _leftFlushStartTime) / 1000;
+      unsigned long remaining = (FLUSH_DURATION_MS / 1000) - elapsed;
+      if (remaining > 0)
       {
-        _timerRightMinutes = 0;
-        _timerRightSeconds = 0;
-        _timerRightStartTime = _currentTime;
+        _timerLeftMinutes = remaining / 60;
+        _timerLeftSeconds = remaining % 60;
+      }
+      else
+      {
+        // Reset to 0 when flush duration is complete
+        _timerLeftMinutes = 0;
+        _timerLeftSeconds = 0;
       }
     }
     else
     {
-      // Still in delay period, show 00:00
+      // Only start countdown if we've passed the start time
+      // This creates a pause showing 00:00 before starting countdown
+      if (_currentTime >= _timerLeftStartTime)
+      {
+        // Between flushes - count down from time lapse period
+        unsigned long elapsed = (_currentTime - _timerLeftStartTime) / 1000;
+        unsigned long totalTime = _flushTotalTimeLapseMin * 60;
+        if (elapsed < totalTime)
+        {
+          unsigned long remaining = totalTime - elapsed;
+          _timerLeftMinutes = remaining / 60;
+          _timerLeftSeconds = remaining % 60;
+        }
+        else
+        {
+          // Reset to 0 when time lapse is complete
+          _timerLeftMinutes = 0;
+          _timerLeftSeconds = 0;
+        }
+      }
+      else
+      {
+        // Keep showing 00:00 until start time is reached
+        _timerLeftMinutes = 0;
+        _timerLeftSeconds = 0;
+      }
+    }
+  }
+
+  // Update right timer - count down from flush duration
+  if (_timerRightRunning)
+  {
+    if (_rightFlushActive)
+    {
+      // During flush - count down from 60 seconds
+      unsigned long elapsed = (_currentTime - _rightFlushStartTime) / 1000;
+      unsigned long remaining = (FLUSH_DURATION_MS / 1000) - elapsed;
+      if (remaining > 0)
+      {
+        _timerRightMinutes = remaining / 60;
+        _timerRightSeconds = remaining % 60;
+      }
+      else
+      {
+        // Reset to 0 when flush duration is complete
+        _timerRightMinutes = 0;
+        _timerRightSeconds = 0;
+      }
+    }
+    else if (_currentTime >= _timerRightStartTime)
+    {
+      // Between flushes - count down to next flush
+      unsigned long remaining = (_timerRightStartTime - _currentTime) / 1000;
+      _timerRightMinutes = remaining / 60;
+      _timerRightSeconds = remaining % 60;
+    }
+    else
+    {
+      // In delay period before first flush - show 00:00
       _timerRightMinutes = 0;
       _timerRightSeconds = 0;
     }
   }
-
+  
   // Redraw timers if seconds have changed
   if (_timerLeftSeconds != _lastLeftSeconds)
   {
