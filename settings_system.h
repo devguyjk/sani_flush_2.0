@@ -34,21 +34,19 @@ public:
   bool isSettingsVisible();
   
   // Get setting values for main program to use
-  int getRightToiletFlushDelaySec();
-  int getFlushTotalTimeLapseMin();
-  int getWasteRepoTriggerDelayMs();
-  int getCameraTriggerAfterFlushMs();
-  int getPumpWasteDoseML();
-  int getToiletFlushRelayHoldTimeMS();
-  int getFlushCountForCameraCapture();
+  int getFlushDelayTime();
+  int getFlushTimeGap();
+  int getWasteQtyPerFlush();
+  bool getFlushToSnapPic();
   
 private:
   TFT_eSPI* tft;
   Preferences prefs;
-  FlushSetting settings[7];
+  FlushSetting settings[8];  // Increased from 4 to 8
   bool settingsVisible;
   bool touching;
   unsigned long lastTouch;
+  int scrollOffset;  // Add scroll offset
   
   void loadSettings();
   void saveSettings();

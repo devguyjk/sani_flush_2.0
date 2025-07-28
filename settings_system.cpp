@@ -14,15 +14,17 @@ SettingsSystem::SettingsSystem(TFT_eSPI* display) {
   settingsVisible = false;
   touching = false;
   lastTouch = 0;
+  scrollOffset = 0;  // Initialize scroll offset
   
-  // Initialize settings with specific values as per requirements
-  settings[0] = {"Right Toilet Delay", "sec", 10, 5, 40, 5, false, "rightDelay"};
-  settings[1] = {"Flush Time Lapse", "min", 5, 1, 45, 5, false, "flushTime"};
-  settings[2] = {"Waste Trigger Delay", "ms", 5000, 2500, 20000, 2500, false, "wasteDelay"};
-  settings[3] = {"Camera Trigger Delay", "ms", 2500, 2500, 20000, 2500, false, "cameraDelay"};
-  settings[4] = {"Pump Waste Dose", "ml", 100, 50, 300, 50, false, "pumpDose"};
-  settings[5] = {"Toilet Relay Hold", "ms", 2000, 1000, 6000, 1000, false, "relayHold"};
-  settings[6] = {"Camera Capture Count", "", 3, 1, 30, 1, false, "cameraCount"};
+  // Initialize settings with 8 items to test scrolling
+  settings[0] = {"Flush Delay Time", "ms", 500, 0, 5000, 50, false, "delayTime"};
+  settings[1] = {"Flush Time Gap", "ms", 1000, 100, 10000, 100, false, "timeGap"};
+  settings[2] = {"Waste Qty Per Flush", "oz", 16, 1, 100, 1, false, "wasteQty"};
+  settings[3] = {"Flush to Snap Pic", "", 1, 0, 1, 1, false, "snapPic"};
+  settings[4] = {"Auto Flush", "", 0, 0, 1, 1, false, "autoFlush"};
+  settings[5] = {"Night Mode", "", 1, 0, 1, 1, false, "nightMode"};
+  settings[6] = {"Sound Volume", "%", 75, 0, 100, 5, false, "volume"};
+  settings[7] = {"Screen Timeout", "sec", 60, 10, 300, 10, false, "timeout"};
 }
 
 void SettingsSystem::begin() {
@@ -61,54 +63,104 @@ void SettingsSystem::handleTouch() {
 }
 
 void SettingsSystem::handleSettingsPageTouch(int x, int y) {
-  // Back button - fix the coordinates and add debug
+  Serial.printf("Touch detected: X=%d, Y=%d\n", x, y);
+  
+  // Back button
   if(x >= 10 && x <= 50 && y >= 10 && y <= 40) {
     Serial.println("Back button touched - hiding settings!");
     resetEditingStates();
-    settingsVisible = false;  // Make sure this is set
+    settingsVisible = false;
+    scrollOffset = 0;
     return;
   }
   
-  // Settings items
-  int itemHeight = 60;
-  int startY = 70;
-  
-  for(int i = 0; i < 7; i++) {
-    int itemY = startY + i * itemHeight;
+  // Scroll arrow buttons - LARGER TOUCH AREAS
+  if(x >= 200 && x <= 235) {
+    Serial.println("Touch in scroll arrow area");
     
-    if(y >= itemY && y <= itemY + 55) {
+    // Up arrow - LARGER touch area
+    if(y >= 55 && y <= 90) {
+      Serial.println("UP arrow touched!");
+      if(scrollOffset > 0) {
+        scrollOffset -= 35; // Scroll UP (show previous items)
+        if(scrollOffset < 0) scrollOffset = 0;
+        Serial.println("Scrolled up - New offset: " + String(scrollOffset));
+        drawInterface();
+      } else {
+        Serial.println("Already at top - cannot scroll up");
+      }
+      return;
+    }
+    
+    // Down arrow - LARGER touch area
+    if(y >= 275 && y <= 320) {  // Extended to bottom of screen
+      Serial.println("DOWN arrow touched!");
+      int maxScroll = max(0, (8 * 35) - (320 - 55 - 10));
+      Serial.println("Max scroll: " + String(maxScroll));
+      if(scrollOffset < maxScroll) {
+        scrollOffset += 35; // Scroll DOWN (show next items)
+        if(scrollOffset > maxScroll) scrollOffset = maxScroll;
+        Serial.println("Scrolled down - New offset: " + String(scrollOffset));
+        drawInterface();
+      } else {
+        Serial.println("Already at bottom - cannot scroll down");
+      }
+      return;
+    }
+    
+    Serial.println("Touch in scroll area but outside button ranges");
+    Serial.println("Up: Y=55-90, Down: Y=275-320");
+  }
+  
+  // Settings items - updated for compact layout
+  int itemHeight = 35;
+  int startY = 55;
+  
+  for(int i = 0; i < 8; i++) {
+    int itemY = startY + (i * itemHeight) - scrollOffset;
+    
+    // Check if item is visible and touched (exclude right scroll area)
+    if(y >= itemY && y <= itemY + 30 && 
+       x >= 10 && x <= 195 &&  // Reduced to avoid scroll arrows
+       itemY >= startY && itemY <= (320 - 10 - itemHeight)) {
+      
+      Serial.println("Setting " + String(i) + " (" + String(settings[i].label) + ") touched!");
+      
       if(settings[i].editing) {
         // Handle value editing
         if(x < 120) {
-          // Decrease value
           settings[i].value = max(settings[i].minVal, 
             settings[i].value - settings[i].step);
+          Serial.println("Decreased to: " + String(settings[i].value));
         } else {
-          // Increase value
           settings[i].value = min(settings[i].maxVal, 
             settings[i].value + settings[i].step);
+          Serial.println("Increased to: " + String(settings[i].value));
         }
-        saveSettings(); // Auto-save when value changes
+        saveSettings();
       } else {
         // Enter edit mode
+        Serial.println("Entering edit mode for: " + String(settings[i].label));
         resetEditingStates();
         settings[i].editing = true;
       }
       drawInterface();
-      break;
+      return;
     }
   }
+  
+  Serial.println("Touch not handled - outside all areas");
 }
 
 void SettingsSystem::loadSettings() {
-  for(int i = 0; i < 7; i++) {
+  for(int i = 0; i < 8; i++) {
     settings[i].value = prefs.getInt(settings[i].prefKey, settings[i].value);
   }
   Serial.println("Flush settings loaded from memory");
 }
 
 void SettingsSystem::saveSettings() {
-  for(int i = 0; i < 7; i++) {
+  for(int i = 0; i < 8; i++) {
     prefs.putInt(settings[i].prefKey, settings[i].value);
   }
   Serial.println("Flush settings saved to memory");
@@ -118,13 +170,40 @@ void SettingsSystem::drawInterface() {
   tft->fillScreen(SETTINGS_BG_COLOR);
   drawHeader();
   
-  // Settings items
-  int itemHeight = 60;
-  int startY = 70;
+  // Compact scrollable settings
+  int itemHeight = 35;
+  int startY = 55;
+  int availableHeight = 320 - startY - 10;
   
-  for(int i = 0; i < 7; i++) {
-    drawSettingItem(i, startY + i * itemHeight);
+  // Draw visible items based on scroll offset
+  for(int i = 0; i < 8; i++) {
+    int itemY = startY + (i * itemHeight) - scrollOffset;
+    
+    // Only draw items that are visible on screen
+    if(itemY >= startY && itemY <= (startY + availableHeight - itemHeight)) {
+      drawSettingItem(i, itemY);
+    }
   }
+  
+  // Up arrow - TOP RIGHT (just below header) - LARGER TOUCH AREA
+  tft->fillRoundRect(200, 55, 35, 35, 6, SETTINGS_PRIMARY_COLOR);
+  tft->setTextColor(TFT_WHITE);
+  tft->setTextSize(3);
+  tft->setTextDatum(MC_DATUM);
+  tft->drawString("^", 217, 72);  // Draw simple ^ character
+  
+  // Down arrow - BOTTOM RIGHT - LARGER TOUCH AREA
+  tft->fillRoundRect(200, 275, 35, 35, 6, SETTINGS_PRIMARY_COLOR);
+  tft->setTextColor(TFT_WHITE);
+  tft->setTextSize(3);
+  tft->setTextDatum(MC_DATUM);
+  // Draw inverted triangle using multiple lines
+  tft->drawString("v", 217, 292);  // Draw simple v character
+  
+  // Debug info
+  Serial.println("Up arrow: X=200-235, Y=55-90");
+  Serial.println("Down arrow: X=200-235, Y=275-310");
+  Serial.println("Current scroll offset: " + String(scrollOffset));
 }
 
 void SettingsSystem::drawHeader() {
@@ -138,7 +217,7 @@ void SettingsSystem::drawHeader() {
   tft->setTextColor(TFT_WHITE);
   tft->setTextSize(2);
   tft->setTextDatum(MC_DATUM);
-  tft->drawString("Flush Settings", 130, 25);
+  tft->drawString("Flush Settings", 120, 25);
 }
 
 void SettingsSystem::drawBackButton() {
@@ -155,23 +234,23 @@ void SettingsSystem::drawBackButton() {
 void SettingsSystem::drawSettingItem(int index, int y) {
   FlushSetting& setting = settings[index];
   int x = 10;
-  int w = 220;
-  int h = 55;
+  int w = 178;  // Reduced width to make room for scroll arrows
+  int h = 30;   // Reduced from 40 to 30
   
   // Background
   uint16_t bgColor = setting.editing ? SETTINGS_ACCENT_COLOR : SETTINGS_CARD_COLOR;
   uint16_t textColor = setting.editing ? TFT_WHITE : SETTINGS_TEXT_COLOR;
   
-  tft->fillRoundRect(x, y, w, h, 10, bgColor);
-  tft->drawRoundRect(x, y, w, h, 10, SETTINGS_BORDER_COLOR);
+  tft->fillRoundRect(x, y, w, h, 6, bgColor);
+  tft->drawRoundRect(x, y, w, h, 6, SETTINGS_BORDER_COLOR);
   
-  // Label
+  // Label - more compact
   tft->setTextColor(textColor);
   tft->setTextSize(1);
   tft->setTextDatum(TL_DATUM);
-  tft->drawString(setting.label, x + 12, y + 10);
+  tft->drawString(setting.label, x + 6, y + 4);
   
-  // Value display
+  // Value display - more compact
   String valueStr = formatSettingValue(setting);
   
   if(setting.editing) {
@@ -179,57 +258,62 @@ void SettingsSystem::drawSettingItem(int index, int y) {
     tft->setTextColor(TFT_WHITE);
     tft->setTextSize(1);
     tft->setTextDatum(TR_DATUM);
-    tft->drawString("◀", x + w - 60, y + 30);
-    tft->drawString("▶", x + w - 20, y + 30);
+    tft->drawString("◀", x + w - 35, y + 18);
+    tft->drawString("▶", x + w - 10, y + 18);
     
     tft->setTextColor(TFT_WHITE);
-    tft->setTextSize(2);
+    tft->setTextSize(1);
     tft->setTextDatum(TC_DATUM);
-    tft->drawString(valueStr, x + w - 40, y + 25);
+    tft->drawString(valueStr, x + w - 22, y + 18);
   } else {
     // Normal mode
     tft->setTextColor(SETTINGS_TEXT_SEC_COLOR);
     tft->setTextSize(1);
     tft->setTextDatum(TR_DATUM);
-    tft->drawString(valueStr, x + w - 12, y + 30);
+    tft->drawString(valueStr, x + w - 6, y + 18);
+  }
+  
+  // Very compact range info (if applicable)
+  if(setting.maxVal > setting.minVal && String(setting.label) != "Flush to Snap Pic") {
+    String range = String(setting.minVal) + "-" + String(setting.maxVal);
+    tft->setTextColor(SETTINGS_TEXT_SEC_COLOR);
+    tft->setTextSize(1);
+    tft->setTextDatum(TL_DATUM);
+    tft->drawString(range, x + 6, y + 18);
   }
 }
 
 String SettingsSystem::formatSettingValue(FlushSetting setting) {
-  return String(setting.value) + setting.unit;
+  String result;
+  
+  if(String(setting.label) == "Flush to Snap Pic") {
+    result = setting.value ? "ON" : "OFF";
+  } else {
+    result = String(setting.value) + setting.unit;
+  }
+  
+  return result;
 }
 
 void SettingsSystem::resetEditingStates() {
-  for(int i = 0; i < 7; i++) {
+  for(int i = 0; i < 8; i++) {
     settings[i].editing = false;
   }
 }
 
 // Getter functions for main program to access settings
-int SettingsSystem::getRightToiletFlushDelaySec() {
+int SettingsSystem::getFlushDelayTime() {
   return settings[0].value;
 }
 
-int SettingsSystem::getFlushTotalTimeLapseMin() {
+int SettingsSystem::getFlushTimeGap() {
   return settings[1].value;
 }
 
-int SettingsSystem::getWasteRepoTriggerDelayMs() {
+int SettingsSystem::getWasteQtyPerFlush() {
   return settings[2].value;
 }
 
-int SettingsSystem::getCameraTriggerAfterFlushMs() {
-  return settings[3].value;
-}
-
-int SettingsSystem::getPumpWasteDoseML() {
-  return settings[4].value;
-}
-
-int SettingsSystem::getToiletFlushRelayHoldTimeMS() {
-  return settings[5].value;
-}
-
-int SettingsSystem::getFlushCountForCameraCapture() {
-  return settings[6].value;
+bool SettingsSystem::getFlushToSnapPic() {
+  return settings[3].value == 1;
 }

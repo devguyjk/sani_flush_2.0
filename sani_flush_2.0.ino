@@ -9,6 +9,7 @@
 #include "draw_functions.h"
 #include "settings_system.h"
 
+
 uint16_t calData[5] = {237, 3595, 372, 3580, 4};
 
 // WiFi credentials
@@ -42,6 +43,8 @@ void setup()
   Serial.flush();
   Serial.println("\n=== SANI FLUSH 2.0 STARTING ===");
   Serial.println("ESP32-S3 Serial initialized successfully!");
+  
+
 
   // Initialize WiFi
   WiFi.begin(ssid, password);
