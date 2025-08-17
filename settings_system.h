@@ -34,10 +34,19 @@ public:
   bool isSettingsVisible();
   
   // Get setting values for main program to use
-  int getFlushDelayTime();
-  int getFlushTimeGap();
+  int getFlushRelayTimeLapse();
+  int getFlushWorkflowRepeat();
   int getWasteQtyPerFlush();
-  bool getFlushToSnapPic();
+  int getPicEveryNFlushes();
+  
+  // Additional getters for compatibility
+  int getRightToiletFlushDelaySec();
+
+  int getWasteRepoTriggerDelayMs();
+  int getCameraTriggerAfterFlushMs();
+  int getPumpWasteDoseML();
+  int getToiletFlushRelayHoldTimeMS();
+  int getFlushCountForCameraCapture();
   
 private:
   TFT_eSPI* tft;

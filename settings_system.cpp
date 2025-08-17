@@ -1,5 +1,7 @@
 #include "settings_system.h"
 
+// Forward declaration for drawFlowDetails
+void drawFlowDetails();
 // Customizable color variables - modify these to match your design
 uint16_t SETTINGS_BG_COLOR = TFT_WHITE;        // White background
 uint16_t SETTINGS_CARD_COLOR = 0xF7BE;         // Light gray cards
@@ -17,13 +19,13 @@ SettingsSystem::SettingsSystem(TFT_eSPI* display) {
   scrollOffset = 0;  // Initialize scroll offset
   
   // Initialize settings with 8 items to test scrolling
-  settings[0] = {"Flush Delay Time", "ms", 500, 0, 5000, 50, false, "delayTime"};
-  settings[1] = {"Flush Time Gap", "ms", 1000, 100, 10000, 100, false, "timeGap"};
-  settings[2] = {"Waste Qty Per Flush", "oz", 16, 1, 100, 1, false, "wasteQty"};
-  settings[3] = {"Flush to Snap Pic", "", 1, 0, 1, 1, false, "snapPic"};
-  settings[4] = {"Auto Flush", "", 0, 0, 1, 1, false, "autoFlush"};
-  settings[5] = {"Night Mode", "", 1, 0, 1, 1, false, "nightMode"};
-  settings[6] = {"Sound Volume", "%", 75, 0, 100, 5, false, "volume"};
+  settings[0] = {"Flush Relay Time Lapse", "ms", 3000, 1000, 10000, 500, false, "flushRelayTimeLapse"};
+  settings[1] = {"Flush Workflow Repeat", "sec", 120, 60, 600, 30, false, "flushWorkflowRepeat"};
+  settings[2] = {"Waste Qty Per Flush", "ml", 50, 25, 3000, 25, false, "wasteQty"};
+  settings[3] = {"Pic Every N Flushes", "", 2, 1, 10, 1, false, "picFlushes"};
+  settings[4] = {"Waste Repo Pump Delay", "sec", 7, 1, 20, 1, false, "wasteDelay"};
+  settings[5] = {"Camera Pic Delay", "ms", 2500, 500, 10000, 500, false, "cameraPicDelay"};
+  settings[6] = {"Flush right, after left flush delay", "sec", 5, 1, 100, 1, false, "flushRighDelay"};
   settings[7] = {"Screen Timeout", "sec", 60, 10, 300, 10, false, "timeout"};
 }
 
@@ -153,10 +155,12 @@ void SettingsSystem::handleSettingsPageTouch(int x, int y) {
 }
 
 void SettingsSystem::loadSettings() {
+  // FORCE DEFAULTS: Use code defaults instead of flash memory
+  Serial.println("Using code defaults (ignoring flash memory)");
   for(int i = 0; i < 8; i++) {
-    settings[i].value = prefs.getInt(settings[i].prefKey, settings[i].value);
+    Serial.println("Setting " + String(i) + " (" + String(settings[i].label) + "): " + String(settings[i].value));
   }
-  Serial.println("Flush settings loaded from memory");
+  Serial.println("All settings loaded from code defaults");
 }
 
 void SettingsSystem::saveSettings() {
@@ -164,6 +168,11 @@ void SettingsSystem::saveSettings() {
     prefs.putInt(settings[i].prefKey, settings[i].value);
   }
   Serial.println("Flush settings saved to memory");
+  
+  // Update flow details when settings change
+  if (!settingsVisible) {
+    drawFlowDetails();
+  }
 }
 
 void SettingsSystem::drawInterface() {
@@ -274,7 +283,7 @@ void SettingsSystem::drawSettingItem(int index, int y) {
   }
   
   // Very compact range info (if applicable)
-  if(setting.maxVal > setting.minVal && String(setting.label) != "Flush to Snap Pic") {
+  if(setting.maxVal > setting.minVal && String(setting.label) != "Pic Every N Flushes") {
     String range = String(setting.minVal) + "-" + String(setting.maxVal);
     tft->setTextColor(SETTINGS_TEXT_SEC_COLOR);
     tft->setTextSize(1);
@@ -286,8 +295,8 @@ void SettingsSystem::drawSettingItem(int index, int y) {
 String SettingsSystem::formatSettingValue(FlushSetting setting) {
   String result;
   
-  if(String(setting.label) == "Flush to Snap Pic") {
-    result = setting.value ? "ON" : "OFF";
+  if(String(setting.label) == "Pic Every N Flushes") {
+    result = String(setting.value);
   } else {
     result = String(setting.value) + setting.unit;
   }
@@ -302,18 +311,46 @@ void SettingsSystem::resetEditingStates() {
 }
 
 // Getter functions for main program to access settings
-int SettingsSystem::getFlushDelayTime() {
+int SettingsSystem::getFlushRelayTimeLapse() {
   return settings[0].value;
 }
 
-int SettingsSystem::getFlushTimeGap() {
-  return settings[1].value;
+int SettingsSystem::getFlushWorkflowRepeat() {
+  return settings[1].value * 1000; // Convert seconds to milliseconds
 }
 
 int SettingsSystem::getWasteQtyPerFlush() {
   return settings[2].value;
 }
 
-bool SettingsSystem::getFlushToSnapPic() {
-  return settings[3].value == 1;
+int SettingsSystem::getPicEveryNFlushes() {
+  return settings[3].value;
+}
+
+// Additional getters for compatibility
+int SettingsSystem::getRightToiletFlushDelaySec() {
+  return 30; // Default 30 seconds
+}
+
+
+
+int SettingsSystem::getWasteRepoTriggerDelayMs() {
+  int result = settings[4].value * 1000; // Convert seconds to milliseconds
+  return result;
+}
+
+int SettingsSystem::getCameraTriggerAfterFlushMs() {
+  return settings[5].value; // Already in milliseconds
+}
+
+int SettingsSystem::getPumpWasteDoseML() {
+  return 50; // Default 50ml
+}
+
+int SettingsSystem::getToiletFlushRelayHoldTimeMS() {
+  return settings[0].value; // Use setting value
+}
+
+int SettingsSystem::getFlushCountForCameraCapture() {
+  return settings[3].value; // Use setting value
 }

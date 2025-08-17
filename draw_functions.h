@@ -24,7 +24,12 @@ void initializeFlushFlow();
 void flushToilet(Location location);
 void updateFlushFlow();
 void drawFlowDetails();
-void drawFlushBar();
-void updateFlushBar();
+void drawLeftFlushBar();
+void updateLeftFlushBar();
+void drawRightFlushBar();
+void updateRightFlushBar();
+String callUploadSaniPhoto(const char *cameraID, const char *imagePrefix);
+void captureDualCameras(Location location, bool isAuto);
+void updatePendingCaptures();
 
 #endif // DRAW_FUNCTIONS_H

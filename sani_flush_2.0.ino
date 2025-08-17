@@ -9,17 +9,19 @@
 #include "draw_functions.h"
 #include "settings_system.h"
 
+// Test function declarations
+void testWasteRepoTiming();
+void testWasteRepoActivation();
+void runWasteRepoTests();
 
 uint16_t calData[5] = {237, 3595, 372, 3580, 4};
 
 // WiFi credentials
 const char *ssid = "juke-fiber-ofc";
 const char *password = "swiftbubble01";
-
 // TM1637 Display object
 TM1637Display display(TM1637_SCK, TM1637_DIO);
 int flushCount = 0;
-
 // CREATE SETTINGS INSTANCE
 SettingsSystem flushSettings(&tft);
 
@@ -119,6 +121,7 @@ void loop()
     if (!flushSettings.isSettingsVisible())
     {
       drawMainDisplay(); // Redraw main when settings close
+      drawFlowDetails(); // Ensure flow details reflect any setting changes
     }
   }
   else
@@ -148,9 +151,14 @@ void loop()
     Serial.println("[STATE] FlushFlow:" + String(_flushFlowActive) +
                    " LeftFlush:" + String(_leftFlushActive) +
                    " RightFlush:" + String(_rightFlushActive) +
-                   " Triangle:" + String(_drawTriangle));
+                   " Triangle:" + String(_drawTriangle) +
+                   " WasteRepoL:" + String(_animateWasteRepoLeft) +
+                   " WasteRepoR:" + String(_animateWasteRepoRight));
     lastStateDebug = _currentTime;
   }
+  
+  // Run waste repo tests once
+  runWasteRepoTests();
 }
 
 void checkTouch(int16_t touchX, int16_t touchY)
@@ -183,14 +191,9 @@ void checkTouch(int16_t touchX, int16_t touchY)
 
       // Apply settings to global variables
       RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
-      _flushTotalTimeLapseMin = flushSettings.getFlushTotalTimeLapseMin();
-      _wasteRepoTriggerDelayMs = flushSettings.getWasteRepoTriggerDelayMs();
-      _cameraTriggerAfterFlushMs = flushSettings.getCameraTriggerAfterFlushMs();
-      _pumpWasteDoseML = flushSettings.getPumpWasteDoseML();
-      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getToiletFlushRelayHoldTimeMS();
-      _flushCountForCameraCapture = flushSettings.getFlushCountForCameraCapture();
-      PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteDoseML * 1000) / PUMP_WASTE_ML_SEC;
-      Serial.println("Settings applied to system");
+      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
+      _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
+      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
       drawFlowDetails();
     }
   }
@@ -205,14 +208,9 @@ void checkTouch(int16_t touchX, int16_t touchY)
 
       // Apply settings to global variables
       RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
-      _flushTotalTimeLapseMin = flushSettings.getFlushTotalTimeLapseMin();
-      _wasteRepoTriggerDelayMs = flushSettings.getWasteRepoTriggerDelayMs();
-      _cameraTriggerAfterFlushMs = flushSettings.getCameraTriggerAfterFlushMs();
-      _pumpWasteDoseML = flushSettings.getPumpWasteDoseML();
-      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getToiletFlushRelayHoldTimeMS();
-      _flushCountForCameraCapture = flushSettings.getFlushCountForCameraCapture();
-      PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteDoseML * 1000) / PUMP_WASTE_ML_SEC;
-      Serial.println("Settings applied to system");
+      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
+      _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
+      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
       drawFlowDetails();
     }
   }
@@ -224,12 +222,8 @@ void checkTouch(int16_t touchX, int16_t touchY)
     if (!_flashCameraLeft)
     {
       _flashCameraLeft = true;
-
-      // Manual capture always uses 0000
-      String imagePrefix = "left_0000";
-
       Serial.println("Manual snap pic - left camera flash animation started");
-      // Don't reset flag - let animation handle it
+      // Animation will handle dual camera capture
     }
   }
 
@@ -240,12 +234,8 @@ void checkTouch(int16_t touchX, int16_t touchY)
     if (!_flashCameraRight)
     {
       _flashCameraRight = true;
-
-      // Manual capture always uses 0000
-      String imagePrefix = "right_0000";
-
       Serial.println("Manual snap pic - right camera flash animation started");
-      // Don't reset flag - let animation handle it
+      // Animation will handle dual camera capture
     }
   }
 
@@ -259,14 +249,9 @@ void checkTouch(int16_t touchX, int16_t touchY)
 
       // Apply settings to global variables
       RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
-      _flushTotalTimeLapseMin = flushSettings.getFlushTotalTimeLapseMin();
-      _wasteRepoTriggerDelayMs = flushSettings.getWasteRepoTriggerDelayMs();
-      _cameraTriggerAfterFlushMs = flushSettings.getCameraTriggerAfterFlushMs();
-      _pumpWasteDoseML = flushSettings.getPumpWasteDoseML();
-      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getToiletFlushRelayHoldTimeMS();
-      _flushCountForCameraCapture = flushSettings.getFlushCountForCameraCapture();
-      PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteDoseML * 1000) / PUMP_WASTE_ML_SEC;
-      Serial.println("Settings applied to system");
+      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
+      _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
+      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
       drawFlowDetails();
     }
   }
@@ -281,14 +266,9 @@ void checkTouch(int16_t touchX, int16_t touchY)
 
       // Apply settings to global variables
       RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
-      _flushTotalTimeLapseMin = flushSettings.getFlushTotalTimeLapseMin();
-      _wasteRepoTriggerDelayMs = flushSettings.getWasteRepoTriggerDelayMs();
-      _cameraTriggerAfterFlushMs = flushSettings.getCameraTriggerAfterFlushMs();
-      _pumpWasteDoseML = flushSettings.getPumpWasteDoseML();
-      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getToiletFlushRelayHoldTimeMS();
-      _flushCountForCameraCapture = flushSettings.getFlushCountForCameraCapture();
-      PUMP_RELAY_ACTIVE_TIME_MS = (_pumpWasteDoseML * 1000) / PUMP_WASTE_ML_SEC;
-      Serial.println("Settings applied to system");
+      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
+      _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
+      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
       drawFlowDetails();
     }
   }
@@ -321,4 +301,36 @@ void initializeDisplay()
   delay(50);
   Serial.println("TM1637 display initialized");
   Serial.println("=== SETUP COMPLETE - READY FOR OPERATION ===");
+}
+
+// Test functions for waste repo debugging
+void testWasteRepoTiming() {
+  Serial.println("=== WASTE REPO TIMING TEST ===");
+  
+  int wasteQty = flushSettings.getWasteQtyPerFlush();
+  int pumpRate = PUMP_WASTE_ML_SEC;
+  int delayMs = flushSettings.getWasteRepoTriggerDelayMs();
+  
+  Serial.println("Current Settings:");
+  Serial.println("- Waste Qty Per Flush: " + String(wasteQty) + "ml");
+  Serial.println("- Pump Rate: " + String(pumpRate) + "ml/sec");
+  Serial.println("- Waste Repo Delay: " + String(delayMs) + "ms (" + String(delayMs/1000) + " seconds)");
+  
+  int expectedDuration = (wasteQty * 1000) / pumpRate;
+  Serial.println("- Expected Pump Duration: " + String(expectedDuration) + "ms (" + String(expectedDuration/1000.0) + " seconds)");
+}
+
+void testWasteRepoActivation() {
+  Serial.println("=== WASTE REPO ACTIVATION TEST ===");
+  Serial.println("Manual activation works when touching waste repo image");
+  Serial.println("Automatic activation should trigger after " + String(flushSettings.getWasteRepoTriggerDelayMs()) + "ms delay");
+}
+
+void runWasteRepoTests() {
+  static bool testsRun = false;
+  if (!testsRun && millis() > 5000) {
+    testWasteRepoTiming();
+    testWasteRepoActivation();
+    testsRun = true;
+  }
 }

@@ -24,11 +24,15 @@ extern const int WASTE_REPO_ANIM_DELAY;
 extern int RIGHT_TOILET_FLUSH_DELAY_MS;
 
 // Camera and server configuration
-extern const char* leftCameraID;
-extern const char* rightCameraID;
+extern const char* left01CameraID;
+extern const char* left02CameraID;
+extern const char* right01CameraID;
+extern const char* right02CameraID;
 extern const char* uploadServerURL;
-extern String leftCameraCaptureUrl;
-extern String rightCameraCaptureUrl;
+extern String left01CameraCaptureUrl;
+extern String left02CameraCaptureUrl;
+extern String right01CameraCaptureUrl;
+extern String right02CameraCaptureUrl;
 
 // Hardware pin definitions
 extern const int RELAY_P1_PIN;
@@ -50,19 +54,11 @@ extern const int CAMERA_FLASH_TOTAL_STAGES;
 extern const int WASTE_REPO_ANIM_TOTAL_STAGES;
 
 // Relay timing constants
-extern int _pumpWasteDoseML;
 extern const int PUMP_WASTE_ML_SEC;
-extern int PUMP_RELAY_ACTIVE_TIME_MS;
 extern int TOILET_FLUSH_HOLD_TIME_MS;
 
-// Flush flow variables (configurable)
-extern int _flushTotalTimeLapseMin;
-extern int _wasteRepoTriggerDelayMs;
-extern int _cameraTriggerAfterFlushMs;
+// Flush flow variables (configurable) - now use settings
 extern int _flushCountForCameraCapture;
-
-// Flush duration constant (60 seconds)
-extern const int FLUSH_DURATION_MS;
 
 // GLOBAL VARIABLES (prefixed with _)
 extern bool _flushLeft;
