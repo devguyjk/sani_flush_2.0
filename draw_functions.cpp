@@ -676,14 +676,16 @@ void initializeFlushFlow()
   logStep("Starting timers");
   _timerLeftRunning = true;
   _timerLeftStartTime = _currentTime;
-  _timerLeftMinutes = 0;
-  _timerLeftSeconds = 0;
+  // Initialize timer to full flush duration (2 minutes)
+  unsigned long flushDurationSec = flushSettings.getFlushWorkflowRepeat() / 1000;
+  _timerLeftMinutes = flushDurationSec / 60;
+  _timerLeftSeconds = flushDurationSec % 60;
 
   // Start right timer with delay
   _timerRightRunning = true;
   _timerRightStartTime = _currentTime + RIGHT_TOILET_FLUSH_DELAY_MS;
-  _timerRightMinutes = 0;
-  _timerRightSeconds = 0;
+  _timerRightMinutes = flushDurationSec / 60;
+  _timerRightSeconds = flushDurationSec % 60;
 }
 
 void flushToilet(Location location)
@@ -755,8 +757,11 @@ void updateFlushFlow()
       }
 
       // Schedule left toilet restart after time lapse
-      // Set start time to 2 seconds in the future to allow timer to display 00:00 briefly
-      _timerLeftStartTime = _currentTime + 2000;
+      _timerLeftStartTime = _currentTime;
+      // Reset timer to full flush duration for next cycle
+      unsigned long flushDurationSec = flushSettings.getFlushWorkflowRepeat() / 1000;
+      _timerLeftMinutes = flushDurationSec / 60;
+      _timerLeftSeconds = flushDurationSec % 60;
 
       logStep("Scheduling left toilet flush restart after time lapse");
     }
@@ -802,11 +807,13 @@ void updateFlushFlow()
         // HTTP call will happen after animation completes
       }
 
-      // Reset right timer for next cycle
-      // Set start time to 2 seconds in the future to allow timer to display 00:00 briefly
-      _timerRightStartTime = _currentTime + 2000 + flushSettings.getFlushWorkflowRepeat() + RIGHT_TOILET_FLUSH_DELAY_MS;
-
       // Schedule right toilet restart after time lapse + delay
+      _timerRightStartTime = _currentTime + flushSettings.getFlushWorkflowRepeat() + RIGHT_TOILET_FLUSH_DELAY_MS;
+      // Reset timer to full flush duration for next cycle
+      unsigned long flushDurationSec = flushSettings.getFlushWorkflowRepeat() / 1000;
+      _timerRightMinutes = flushDurationSec / 60;
+      _timerRightSeconds = flushDurationSec % 60;
+
       logStep("Scheduling right toilet flush restart after time lapse + delay");
     }
   }
@@ -827,6 +834,8 @@ void updateFlushFlow()
     {
       logStep("Restarting left toilet flush after time lapse");
       flushToilet(Left);
+      // Reset timer start for new cycle
+      _timerLeftStartTime = _currentTime;
     }
   }
 
@@ -836,7 +845,8 @@ void updateFlushFlow()
   {
     logStep("Restarting right toilet flush after time lapse + delay");
     flushToilet(Right);
-    _timerRightStartTime = _currentTime; // Reset timer start
+    // Reset timer start for new cycle with delay
+    _timerRightStartTime = _currentTime + flushSettings.getFlushWorkflowRepeat() + RIGHT_TOILET_FLUSH_DELAY_MS;
   }
 }
 
