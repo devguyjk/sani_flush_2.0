@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <TJpg_Decoder.h>
+#include <time.h>
 
 #include "sani_flush_logo_165x40.h"
 #include "Toilet_Full_85x105_01.h"
@@ -179,22 +180,31 @@ void captureDualCameras(Location location, bool isAuto)
 {
   const char *camera01ID = (location == Left) ? left01CameraID : right01CameraID;
   const char *camera02ID = (location == Left) ? left02CameraID : right02CameraID;
-  const char *locationStr = (location == Left) ? "left01" : "right01";
-  const char *location2Str = (location == Left) ? "left02" : "right02";
+  const char *locationStr = (location == Left) ? "LEFT" : "RIGHT";
+
+  // Get current time for timestamp
+  time_t now = time(0);
+  struct tm *timeinfo = localtime(&now);
+  
+  // Format: YYYY-MM-DD_[flush_number]_[location]_[seq]_[hhmmss]
+  char dateStr[11]; // YYYY-MM-DD
+  char timeStr[7];  // hhmmss
+  sprintf(dateStr, "%04d-%02d-%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+  sprintf(timeStr, "%02d%02d%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
   String imagePrefix01, imagePrefix02;
   if (isAuto)
   {
-    char flushStr[4];
-    sprintf(flushStr, "%03d", _flushCount);
-    imagePrefix01 = String(locationStr) + "_" + String(flushStr);
-    imagePrefix02 = String(location2Str) + "_" + String(flushStr);
+    char flushStr[5];
+    sprintf(flushStr, "%04d", _flushCount);
+    imagePrefix01 = String(dateStr) + "_" + String(flushStr) + "_" + String(locationStr) + "_01_" + String(timeStr);
+    imagePrefix02 = String(dateStr) + "_" + String(flushStr) + "_" + String(locationStr) + "_02_" + String(timeStr);
     logStep((String("Auto-capturing from both ") + (location == Left ? "left" : "right") + " cameras (every " + String(flushSettings.getPicEveryNFlushes()) + " flushes)").c_str());
   }
   else
   {
-    imagePrefix01 = String(locationStr) + "_0000";
-    imagePrefix02 = String(location2Str) + "_0000";
+    imagePrefix01 = String(dateStr) + "_0000_" + String(locationStr) + "_01_" + String(timeStr);
+    imagePrefix02 = String(dateStr) + "_0000_" + String(locationStr) + "_02_" + String(timeStr);
     logStep((String("Manual capture from both ") + (location == Left ? "left" : "right") + " cameras").c_str());
   }
 

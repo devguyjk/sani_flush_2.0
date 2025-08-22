@@ -1,5 +1,22 @@
 // Complete working main code with settings integration
+
+// BOARD AND LIBRARY VERSION CHECKS - EXACT VERSIONS REQUIRED
+#ifndef ESP_ARDUINO_VERSION
+  #error "ESP32 Arduino Core version not detected. Please install ESP32 board package."
+#endif
+
+// ESP32 Board Package - MUST BE 3.2.1
+#if ESP_ARDUINO_VERSION != ESP_ARDUINO_VERSION_VAL(3, 2, 1)
+  #error "This project requires ESP32 Arduino Core version 3.2.1. Please install the correct version from Espressif Systems."
+#endif
+
+// TFT_eSPI Library Version Check - MUST BE 2.5.34
 #include <TFT_eSPI.h>
+#ifndef TFT_ESPI_VERSION
+  #error "TFT_eSPI version not detected. Please install TFT_eSPI library."
+#endif
+
+
 #include "Shapes.h"
 #include <SPI.h>
 #include <TM1637Display.h>
