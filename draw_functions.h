@@ -31,5 +31,7 @@ void updateRightFlushBar();
 String callUploadSaniPhoto(const char *cameraID, const char *imagePrefix);
 void captureDualCameras(Location location, bool isAuto);
 void updatePendingCaptures();
+void updateCameraDelays();
+
 
 #endif // DRAW_FUNCTIONS_H

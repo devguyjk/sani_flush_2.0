@@ -42,6 +42,8 @@ int flushCount = 0;
 // CREATE SETTINGS INSTANCE
 SettingsSystem flushSettings(&tft);
 
+// Web server disabled for now due to library conflicts
+
 // Function prototypes
 void checkTouch(int16_t touchX, int16_t touchY);
 void updateFlushCount(int amount);
@@ -49,6 +51,7 @@ void initializeDisplay();
 String callUploadSaniPhoto(const char *cameraID, const char *imagePrefix);
 void refreshLastPhoto(Location location);
 void checkPhotoRefreshTouch(int16_t touchX, int16_t touchY);
+void resetApplicationState();
 
 void setup()
 {
@@ -78,10 +81,14 @@ void setup()
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  Serial.println("Web server disabled - using touch interface only");
+
+  // Initialize TFT display first
+  Serial.println("Initializing TFT display...");
   tft.init();
   tft.setRotation(0);
   tft.setTouch(calData);
-  Serial.println("tft Loaded");
+  Serial.println("TFT display initialized");
 
   // Initialize Relay PINs - ENSURE ALL RELAYS ARE OFF
   pinMode(RELAY_P1_PIN, OUTPUT);
@@ -103,16 +110,29 @@ void setup()
   // Initialize global time
   _currentTime = millis();
 
+  // Hardware test - cycle through colors
+  Serial.println("Testing TFT hardware...");
+  tft.fillScreen(TFT_RED);
+  delay(1000);
+  tft.fillScreen(TFT_GREEN);
+  delay(1000);
+  tft.fillScreen(TFT_BLUE);
+  delay(1000);
   tft.fillScreen(TFT_WHITE);
-  Serial.println("TFT screen filled with white");
+  Serial.println("TFT hardware test complete");
 
   // INITIALIZE SETTINGS SYSTEM
   flushSettings.begin();
 
+  // Reset application state to ensure clean initialization
+  resetApplicationState();
+  
   drawMainDisplay();
   Serial.println("Main display drawn");
 
   initializeDisplay();
+  
+
   
   Serial.println("Setup complete - flow details displayed");
 }
@@ -160,6 +180,8 @@ void loop()
   if (!flushSettings.isSettingsVisible()) {
     updateAnimations();
   }
+  
+
 
   // Debug output for active states
   static unsigned long lastStateDebug = 0;
@@ -173,6 +195,8 @@ void loop()
                    " WasteRepoR:" + String(_animateWasteRepoRight));
     lastStateDebug = _currentTime;
   }
+  
+  // Web server disabled
   
   // Run waste repo tests once
   runWasteRepoTests();
@@ -290,24 +314,80 @@ void checkTouch(int16_t touchX, int16_t touchY)
     }
   }
 
-  // HAMBURGER MENU TOUCH HANDLING
+  // Check if hamburger menu was touched
   if (_hamburgerShape && _hamburgerShape->isTouched(touchX, touchY))
   {
     Serial.println("Hamburger menu touched!");
-
-    if (flushSettings.isSettingsVisible())
+    if (!flushSettings.isSettingsVisible())
     {
-      // If settings are visible, hide them and return to main
-      flushSettings.hideSettings();
-      drawMainDisplay(); // Redraw your main display
+      Serial.println("Showing settings...");
+      flushSettings.showSettings();
     }
     else
     {
-      // Show settings
-      flushSettings.showSettings();
+      Serial.println("Hiding settings...");
+      flushSettings.hideSettings();
+      drawMainDisplay();
+      drawFlowDetails();
     }
   }
 }
+
+// Reset application to initial state
+void resetApplicationState() {
+  Serial.println("Resetting application state...");
+  
+  // Reset all animation flags
+  _flushLeft = false;
+  _flushRight = false;
+  _flashCameraLeft = false;
+  _flashCameraRight = false;
+  _animateWasteRepoLeft = false;
+  _animateWasteRepoRight = false;
+  _drawTriangle = true;
+  
+  // Reset timers
+  _timerLeftMinutes = 0;
+  _timerLeftSeconds = 0;
+  _timerLeftRunning = false;
+  _timerLeftStartTime = 0;
+  _timerRightMinutes = 0;
+  _timerRightSeconds = 0;
+  _timerRightRunning = false;
+  _timerRightStartTime = 0;
+  
+  // Reset flush flow state
+  _flushFlowActive = false;
+  _flushFlowStartTime = 0;
+  _flushCount = 0;
+  _leftFlushActive = false;
+  _rightFlushActive = false;
+  _leftFlushStartTime = 0;
+  _rightFlushStartTime = 0;
+  
+  // Reset animation states
+  for(int i = 0; i < 3; i++) {
+    for(int j = 0; j < 2; j++) {
+      _animStates[i][j].stage = 0;
+      _animStates[i][j].lastTime = 0;
+      _animStates[i][j].active = false;
+    }
+  }
+  
+  // Turn off all relays
+  digitalWrite(RELAY_P1_PIN, LOW);
+  digitalWrite(RELAY_P2_PIN, LOW);
+  digitalWrite(RELAY_T1_PIN, LOW);
+  digitalWrite(RELAY_T2_PIN, LOW);
+  
+  // Redraw display
+  drawMainDisplay();
+  drawFlowDetails();
+  
+  Serial.println("Application state reset complete");
+}
+
+// Web server handlers removed due to library conflicts
 
 void initializeDisplay()
 {

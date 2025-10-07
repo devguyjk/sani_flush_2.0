@@ -66,8 +66,8 @@ AnimationState _animStates[3][2] = {
 };
 
 // Camera and server configuration
-const char* left01CameraID = "150deaa5";
-const char* left02CameraID = "031da19d";
+const char* left01CameraID = "5f96fe52";
+const char* left02CameraID = "5e80ed5f";
 const char* right01CameraID = "c4df83c4";
 const char* right02CameraID = "2ddb4fdb";
 const char* uploadServerURL = "http://192.168.4.101:5000/uploadSaniPhoto";

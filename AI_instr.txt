@@ -1,0 +1,19 @@
+For automatic captures update the naming to the following:
+ 
+ Location can be RGT or LFT - right is rgt and left is lft
+ seq can be 01 or 02 - each location camera has this value.
+hhmmaa ia military hour, 2 digit minute, 2 digit seconds
+ auto-id - this is incremented from the most recent files auto-id value. Call the api endpoint /getautoid
+
+ Automatic Capture
+[AUTO-ID]_[YY][MM][DD]_[hhmmss]_[flush_number]_[location]_[seq].png
+022_250821_232513_0001_RGT_01.png
+
+ Manual Capture 
+[AUTO-ID]_[YY][MM][DD]_[hhmmss]_0000_[location]_[seq].png
+022_250821_232513_0000_RGT_01.pngg
+
+
+ this is an issue with the counter. The incrementing of the counter should be after the right side completes a flush sequence. Then the flush counter should increment +1.
+
+ For some reason when the left captures a photo while in automatic mode, the first images have flush number set to 0000. It should begin with 0001, so something is wrong withthe logic here.
