@@ -12,8 +12,8 @@ const int LOGO_WIDTH = 165;
 const int LOGO_HEIGHT = 40;
 const int WASTE_REPO_HEIGHT = 75;
 const int WASTE_REPO_WIDTH = 25;
-const uint16_t BTN_TRIANGLE_COLOR = ILI9341_GREEN;
-const uint16_t BTN_SQUARE_COLOR = ILI9341_RED;
+const uint16_t BTN_TRIANGLE_COLOR = TFT_GREEN;
+const uint16_t BTN_SQUARE_COLOR = TFT_RED;
 int RIGHT_TOILET_FLUSH_DELAY_MS = 10000; // 10 seconds delay for right toilet timer
 
 // Animation timing constants
@@ -36,6 +36,7 @@ bool _flushLeft = false;
 bool _flushRight = false;
 bool _flashCameraLeft = false;
 bool _flashCameraRight = false;
+bool _debugPrintShapeDetails = false; // Set to true to print shape details on creation
 bool _animateWasteRepoLeft = false;
 bool _animateWasteRepoRight = false;
 bool _drawTriangle = true;
@@ -52,6 +53,7 @@ unsigned long _currentTime = 0; // Global time for all animations
 // Flush flow state variables
 bool _flushFlowActive = false;
 unsigned long _flushFlowStartTime = 0;
+bool _initialRightFlushStarted = false;
 int _flushCount = 0;
 bool _leftFlushActive = false;
 bool _rightFlushActive = false;
@@ -70,19 +72,13 @@ const char* left01CameraID = "5f96fe52";
 const char* left02CameraID = "5e80ed5f";
 const char* right01CameraID = "c4df83c4";
 const char* right02CameraID = "2ddb4fdb";
-const char* uploadServerURL = "http://192.168.4.101:5000/uploadSaniPhoto";
-String left01CameraCaptureUrl = "http://" + String(left01CameraID) + ".duckdns.org/capture?flash=true";
-String left02CameraCaptureUrl = "http://" + String(left02CameraID) + ".duckdns.org/capture?flash=true";
-String right01CameraCaptureUrl = "http://" + String(right01CameraID) + ".duckdns.org/capture?flash=true";
-String right02CameraCaptureUrl = "http://" + String(right02CameraID) + ".duckdns.org/capture?flash=true";
+const char* uploadServerURL = "http://192.168.4.103:5000/uploadSaniPhoto";
 
 // Hardware pin definitions
 const int RELAY_P1_PIN = 35;
 const int RELAY_P2_PIN = 36;
 const int RELAY_T1_PIN = 37;
 const int RELAY_T2_PIN = 38;
-const int TM1637_SCK = 16;
-const int TM1637_DIO = 17;
 
 // UI constants
 const unsigned long BUTTON_DEBOUNCE_MS = 300;
@@ -92,6 +88,10 @@ unsigned long lastButtonPress = 0;
 
 // TFT object
 TFT_eSPI tft = TFT_eSPI();
+
+// LCD object (declared in main file)
+// LiquidCrystal_I2C lcd(0x27, 16, 2);
+
 // ================== Global Shape Objects ==================
 Shape *_saniLogoShape = nullptr;
 Shape *_startStopButtonShape = nullptr;

@@ -2,24 +2,24 @@
 
 // BOARD AND LIBRARY VERSION CHECKS - EXACT VERSIONS REQUIRED
 #ifndef ESP_ARDUINO_VERSION
-  #error "ESP32 Arduino Core version not detected. Please install ESP32 board package."
+#error "ESP32 Arduino Core version not detected. Please install ESP32 board package."
 #endif
 
 // ESP32 Board Package - MUST BE 3.2.1
 #if ESP_ARDUINO_VERSION != ESP_ARDUINO_VERSION_VAL(3, 2, 1)
-  #error "This project requires ESP32 Arduino Core version 3.2.1. Please install the correct version from Espressif Systems."
+#error "This project requires ESP32 Arduino Core version 3.2.1. Please install the correct version from Espressif Systems."
 #endif
 
 // TFT_eSPI Library Version Check - MUST BE 2.5.34
 #include <TFT_eSPI.h>
 #ifndef TFT_ESPI_VERSION
-  #error "TFT_eSPI version not detected. Please install TFT_eSPI library."
+#error "TFT_eSPI version not detected. Please install TFT_eSPI library."
 #endif
-
 
 #include "Shapes.h"
 #include <SPI.h>
-#include <TM1637Display.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "global_vars.h"
@@ -36,9 +36,52 @@ uint16_t calData[5] = {237, 3595, 372, 3580, 4};
 // WiFi credentials
 const char *ssid = "juke-fiber-ofc";
 const char *password = "swiftbubble01";
-// TM1637 Display object
-TM1637Display display(TM1637_SCK, TM1637_DIO);
+
+// LCD Display (I2C)
+#define SDA_PIN 14
+#define SCL_PIN 15
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 int flushCount = 0;
+
+// Shared counters (defined here, used by draw_functions.cpp)
+int leftFlushCount = 0;
+int rightFlushCount = 0;
+int imageCount = 0;
+int totalWasteML = 0;
+unsigned long workflowStartTime = 0;
+
+// WiFi/HTTP object management
+HTTPClient* httpClient = nullptr;
+bool wifiNeedsRecreation = false;
+unsigned long lastRightCameraCapture = 0;
+
+// Memory analysis variables
+int completedWorkflowCycles = 0;
+bool firstAnalysisComplete = false;
+unsigned long lastMemoryAnalysis = 0;
+
+void displayLCD(String line1, String line2)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+  lcd.setCursor(0, 1);
+  lcd.print(line2);
+}
+
+void initializeLCDDisplay()
+{
+  writeLog("Initializing LCD display...");
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  lcd.init();
+  lcd.backlight();
+
+  displayLCD("SANI FLUSH 2.0", "LOADING...");
+  
+  writeLog("LCD display initialized successfully!");
+}
+
 // CREATE SETTINGS INSTANCE
 SettingsSystem flushSettings(&tft);
 
@@ -47,11 +90,14 @@ SettingsSystem flushSettings(&tft);
 // Function prototypes
 void checkTouch(int16_t touchX, int16_t touchY);
 void updateFlushCount(int amount);
-void initializeDisplay();
-String callUploadSaniPhoto(const char *cameraID, const char *imagePrefix);
+void initializeLCDDisplay();
+
 void refreshLastPhoto(Location location);
 void checkPhotoRefreshTouch(int16_t touchX, int16_t touchY);
 void resetApplicationState();
+void recreateNetworkObjects();
+void checkMemoryAnalysisTrigger();
+void logMemoryObjects();
 
 void setup()
 {
@@ -63,32 +109,67 @@ void setup()
     delay(10); // Wait for Serial or timeout after 5 seconds
   }
   Serial.flush();
-  Serial.println("\n=== SANI FLUSH 2.0 STARTING ===");
-  Serial.println("ESP32-S3 Serial initialized successfully!");
-  
+  writeLog("=== SANI FLUSH 2.0 STARTING ===");
+  writeLog("ESP32-S3 Serial initialized successfully!");
 
+  // Initialize LCD display
+  initializeLCDDisplay();
+
+  displayLCD("ESP32-S3", "LOADING...");
+  delay(1000);
 
   // Initialize WiFi
+  writeLog("Connecting to WiFi...");
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
-    Serial.print(".");
+    Serial.print("."); // Keep this for visual progress indication
   }
+
+  // WiFi connected
   Serial.println();
-  Serial.println("WiFi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  writeLog("WiFi connected!");
+  writeLog("IP: %s", WiFi.localIP().toString().c_str());
+  
+  // Configure NTP for Pacific Time (handles PST/PDT automatically)
+  configTime(-8 * 3600, 3600, "pool.ntp.org", "time.nist.gov");
+  writeLog("NTP time sync initiated (Pacific Time)");
+  
+  // Wait for time to be set
+  time_t now = time(0);
+  int attempts = 0;
+  while (now < 1000000000 && attempts < 20) {
+    delay(500);
+    now = time(0);
+    attempts++;
+  }
+  
+  if (now > 1000000000) {
+    struct tm *timeinfo = localtime(&now);
+    writeLog("Time synchronized: %04d-%02d-%02d %02d:%02d:%02d", 
+      timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+      timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    writeLog("=== PROCESSOR FULLY LOADED - %04d-%02d-%02d %02d:%02d:%02d ===",
+      timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+      timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+  } else {
+    writeLog("Warning: Time sync failed, using system default");
+  }
 
-  Serial.println("Web server disabled - using touch interface only");
 
-  // Initialize TFT display first
-  Serial.println("Initializing TFT display...");
+  displayLCD(WiFi.localIP().toString(), "LOADING...");
+  delay(1000);
+
+  // Initialize TFT display
+  writeLog("Initializing TFT display...");
   tft.init();
   tft.setRotation(0);
   tft.setTouch(calData);
-  Serial.println("TFT display initialized");
+  writeLog("TFT display initialized");
+
+  displayLCD("TFT DISPLAY", "LOADING...");
+  delay(1000);
 
   // Initialize Relay PINs - ENSURE ALL RELAYS ARE OFF
   pinMode(RELAY_P1_PIN, OUTPUT);
@@ -99,54 +180,64 @@ void setup()
   digitalWrite(RELAY_P2_PIN, LOW);
   digitalWrite(RELAY_T1_PIN, LOW);
   digitalWrite(RELAY_T2_PIN, LOW);
-  Serial.println("All relays initialized to OFF state");
+  writeLog("All relays initialized to OFF state");
 
   // Double-check relay states
-  Serial.println("Relay states - P1:" + String(digitalRead(RELAY_P1_PIN)) +
-                 " P2:" + String(digitalRead(RELAY_P2_PIN)) +
-                 " T1:" + String(digitalRead(RELAY_T1_PIN)) +
-                 " T2:" + String(digitalRead(RELAY_T2_PIN)));
+  writeLog("Relay states - P1:%d P2:%d T1:%d T2:%d", digitalRead(RELAY_P1_PIN), digitalRead(RELAY_P2_PIN), digitalRead(RELAY_T1_PIN), digitalRead(RELAY_T2_PIN));
 
   // Initialize global time
   _currentTime = millis();
 
-  // Hardware test - cycle through colors
-  Serial.println("Testing TFT hardware...");
+  // TFT loading
+  // Hardware test - cycle through colors (faster)
+  writeLog("Testing TFT hardware...");
   tft.fillScreen(TFT_RED);
-  delay(1000);
+  delay(200);
   tft.fillScreen(TFT_GREEN);
-  delay(1000);
+  delay(200);
   tft.fillScreen(TFT_BLUE);
-  delay(1000);
+  delay(200);
   tft.fillScreen(TFT_WHITE);
-  Serial.println("TFT hardware test complete");
+  writeLog("TFT hardware test complete");
+
+  
 
   // INITIALIZE SETTINGS SYSTEM
   flushSettings.begin();
 
   // Reset application state to ensure clean initialization
   resetApplicationState();
-  
+
   drawMainDisplay();
-  Serial.println("Main display drawn");
+  writeLog("Main display drawn");
 
-  initializeDisplay();
-  
+  drawFlowDetails();
 
-  
-  Serial.println("Setup complete - flow details displayed");
+  // 5. Ready state - show initial LCD
+  updateLCDDisplay();
+
+  writeLog("Setup complete - flow details displayed");
 }
+
+
 
 void loop()
 {
   // Update global time at the start of each loop
   _currentTime = millis();
 
-  // Debug output every 10 seconds to verify serial is working
+  // Emergency WiFi recreation when memory gets critically low
+  if (ESP.getFreeHeap() < 220000 && !wifiNeedsRecreation) { // Increased threshold to 220KB
+    writeLog("[MEM_EMERGENCY] LOW MEMORY WARNING - Forcing WiFi recreation (Free: %d bytes)", ESP.getFreeHeap());
+    lastRightCameraCapture = _currentTime - 6000; // Force immediate recreation
+    wifiNeedsRecreation = true;
+  }
+
+  // Reduced debug output - every 60 seconds instead of 10
   static unsigned long lastDebug = 0;
-  if (_currentTime - lastDebug > 10000)
+  if (_currentTime - lastDebug > 60000)
   {
-    Serial.println("[DEBUG] System running - Time: " + String(_currentTime));
+    writeLog("[DEBUG] Time: %lu Free: %d Min: %d", _currentTime, ESP.getFreeHeap(), ESP.getMinFreeHeap());
     lastDebug = _currentTime;
   }
 
@@ -167,44 +258,43 @@ void loop()
     uint16_t touchX, touchY;
     if (tft.getTouch(&touchX, &touchY))
     {
-      Serial.print("Touch X = ");
-      Serial.print(touchX);
-      Serial.print(", Y = ");
-      Serial.println(touchY);
-
+      writeLog("Touch X = %d, Y = %d", touchX, touchY);
       checkTouch(touchX, touchY);
     }
   }
 
   // Update animations based on current state (but not when settings are visible)
-  if (!flushSettings.isSettingsVisible()) {
+  if (!flushSettings.isSettingsVisible())
+  {
     updateAnimations();
   }
-  
 
-
-  // Debug output for active states
-  static unsigned long lastStateDebug = 0;
-  if (_currentTime - lastStateDebug > 5000)
+  // Recreate WiFi/HTTP objects after camera operations (reduced delay)
+  if (wifiNeedsRecreation && _currentTime - lastRightCameraCapture > 2000)
   {
-    Serial.println("[STATE] FlushFlow:" + String(_flushFlowActive) +
-                   " LeftFlush:" + String(_leftFlushActive) +
-                   " RightFlush:" + String(_rightFlushActive) +
-                   " Triangle:" + String(_drawTriangle) +
-                   " WasteRepoL:" + String(_animateWasteRepoLeft) +
-                   " WasteRepoR:" + String(_animateWasteRepoRight));
+    recreateNetworkObjects();
+  }
+
+  // Check for memory analysis triggers
+  checkMemoryAnalysisTrigger();
+
+  // Reduced state debug output - every 30 seconds instead of 5
+  static unsigned long lastStateDebug = 0;
+  if (_currentTime - lastStateDebug > 30000)
+  {
+    writeLog("[STATE] FF:%d LF:%d RF:%d", _flushFlowActive, _leftFlushActive, _rightFlushActive);
     lastStateDebug = _currentTime;
   }
-  
+
   // Web server disabled
-  
+
   // Run waste repo tests once
   runWasteRepoTests();
 }
 
 void checkTouch(int16_t touchX, int16_t touchY)
 {
-  Serial.println("Touched: X = " + String(touchX) + ", Y = " + String(touchY));
+  writeLog("Touched: X = %d, Y = %d", touchX, touchY);
 
   // Check if start/stop button was touched (with debouncing)
   if (_startStopButtonShape && _startStopButtonShape->isTouched(touchX, touchY))
@@ -212,20 +302,21 @@ void checkTouch(int16_t touchX, int16_t touchY)
     unsigned long currentTime = millis();
     if (currentTime - lastButtonPress > BUTTON_DEBOUNCE_MS)
     {
-      Serial.println("Start/Stop button touched!");
+      writeLog("Start/Stop button touched!");
       lastButtonPress = currentTime;
       toggleTimers(); // toggleTimers now handles button state and redraw
     }
     else
     {
-      Serial.println("Button press ignored (debounce)");
+      writeLog("Button press ignored (debounce)");
     }
   }
 
   // Check if left toilet was touched
   if (_toiletLeftShape && _toiletLeftShape->isTouched(touchX, touchY))
   {
-    Serial.println("Left toilet touched!");
+    writeLog("Left toilet touched!");
+
     if (!_flushLeft)
     {
       _flushLeft = true;
@@ -234,7 +325,7 @@ void checkTouch(int16_t touchX, int16_t touchY)
       RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
       TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
       _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
-      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
+      writeLog("Settings applied - Camera every %d flushes", _flushCountForCameraCapture);
       drawFlowDetails();
     }
   }
@@ -242,7 +333,8 @@ void checkTouch(int16_t touchX, int16_t touchY)
   // Check if right toilet was touched
   if (_toiletRightShape && _toiletRightShape->isTouched(touchX, touchY))
   {
-    Serial.println("Right toilet touched!");
+    writeLog("Right toilet touched!");
+
     if (!_flushRight)
     {
       _flushRight = true;
@@ -251,7 +343,7 @@ void checkTouch(int16_t touchX, int16_t touchY)
       RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
       TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
       _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
-      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
+      writeLog("Settings applied - Camera every %d flushes", _flushCountForCameraCapture);
       drawFlowDetails();
     }
   }
@@ -259,11 +351,12 @@ void checkTouch(int16_t touchX, int16_t touchY)
   // Check if left camera was touched
   if (_cameraLeftShape && _cameraLeftShape->isTouched(touchX, touchY))
   {
-    Serial.println("Left camera touched!");
+    writeLog("Left camera touched!");
+
     if (!_flashCameraLeft)
     {
       _flashCameraLeft = true;
-      Serial.println("Manual snap pic - left camera flash animation started");
+      writeLog("Manual snap pic - left camera flash animation started");
       // Animation will handle dual camera capture
     }
   }
@@ -271,11 +364,12 @@ void checkTouch(int16_t touchX, int16_t touchY)
   // Check if right camera was touched
   if (_cameraRightShape && _cameraRightShape->isTouched(touchX, touchY))
   {
-    Serial.println("Right camera touched!");
+    writeLog("Right camera touched!");
+
     if (!_flashCameraRight)
     {
       _flashCameraRight = true;
-      Serial.println("Manual snap pic - right camera flash animation started");
+      writeLog("Manual snap pic - right camera flash animation started");
       // Animation will handle dual camera capture
     }
   }
@@ -283,16 +377,11 @@ void checkTouch(int16_t touchX, int16_t touchY)
   // Check if left waste repo was touched
   if (_wasteRepoLeftShape && _wasteRepoLeftShape->isTouched(touchX, touchY))
   {
-    Serial.println("Left waste repo touched!");
+    writeLog("Left waste repo touched!");
+
     if (!_animateWasteRepoLeft)
     {
       _animateWasteRepoLeft = true;
-
-      // Apply settings to global variables
-      RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
-      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
-      _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
-      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
       drawFlowDetails();
     }
   }
@@ -300,16 +389,11 @@ void checkTouch(int16_t touchX, int16_t touchY)
   // Check if right waste repo was touched
   if (_wasteRepoRightShape && _wasteRepoRightShape->isTouched(touchX, touchY))
   {
-    Serial.println("Right waste repo touched!");
+    writeLog("Right waste repo touched!");
+
     if (!_animateWasteRepoRight)
     {
       _animateWasteRepoRight = true;
-
-      // Apply settings to global variables
-      RIGHT_TOILET_FLUSH_DELAY_MS = flushSettings.getRightToiletFlushDelaySec() * 1000;
-      TOILET_FLUSH_HOLD_TIME_MS = flushSettings.getFlushRelayTimeLapse();
-      _flushCountForCameraCapture = flushSettings.getPicEveryNFlushes();
-      Serial.println("Settings applied to system - Camera every " + String(_flushCountForCameraCapture) + " flushes");
       drawFlowDetails();
     }
   }
@@ -317,15 +401,13 @@ void checkTouch(int16_t touchX, int16_t touchY)
   // Check if hamburger menu was touched
   if (_hamburgerShape && _hamburgerShape->isTouched(touchX, touchY))
   {
-    Serial.println("Hamburger menu touched!");
+    writeLog("Hamburger menu touched!");
     if (!flushSettings.isSettingsVisible())
     {
-      Serial.println("Showing settings...");
       flushSettings.showSettings();
     }
     else
     {
-      Serial.println("Hiding settings...");
       flushSettings.hideSettings();
       drawMainDisplay();
       drawFlowDetails();
@@ -333,11 +415,8 @@ void checkTouch(int16_t touchX, int16_t touchY)
   }
 }
 
-// Reset application to initial state
-void resetApplicationState() {
-  Serial.println("Resetting application state...");
-  
-  // Reset all animation flags
+void resetApplicationState()
+{
   _flushLeft = false;
   _flushRight = false;
   _flashCameraLeft = false;
@@ -345,8 +424,6 @@ void resetApplicationState() {
   _animateWasteRepoLeft = false;
   _animateWasteRepoRight = false;
   _drawTriangle = true;
-  
-  // Reset timers
   _timerLeftMinutes = 0;
   _timerLeftSeconds = 0;
   _timerLeftRunning = false;
@@ -355,77 +432,120 @@ void resetApplicationState() {
   _timerRightSeconds = 0;
   _timerRightRunning = false;
   _timerRightStartTime = 0;
-  
-  // Reset flush flow state
   _flushFlowActive = false;
   _flushFlowStartTime = 0;
+  _initialRightFlushStarted = false;
   _flushCount = 0;
   _leftFlushActive = false;
   _rightFlushActive = false;
   _leftFlushStartTime = 0;
   _rightFlushStartTime = 0;
-  
-  // Reset animation states
-  for(int i = 0; i < 3; i++) {
-    for(int j = 0; j < 2; j++) {
+
+  for (int i = 0; i < 3; i++)
+  {
+    for (int j = 0; j < 2; j++)
+    {
       _animStates[i][j].stage = 0;
       _animStates[i][j].lastTime = 0;
       _animStates[i][j].active = false;
     }
   }
-  
-  // Turn off all relays
+
   digitalWrite(RELAY_P1_PIN, LOW);
   digitalWrite(RELAY_P2_PIN, LOW);
   digitalWrite(RELAY_T1_PIN, LOW);
   digitalWrite(RELAY_T2_PIN, LOW);
-  
-  // Redraw display
-  drawMainDisplay();
-  drawFlowDetails();
-  
-  Serial.println("Application state reset complete");
+
+  // Reset counters and display
+  updateLCDDisplay();
 }
 
-// Web server handlers removed due to library conflicts
-
-void initializeDisplay()
+void updateLCDDisplay()
 {
-  Serial.println("Initializing TM1637 display...");
-  display.setBrightness(0x07);
-  delay(50);
-  display.showNumberDec(flushCount, false);
-  delay(50);
-  Serial.println("TM1637 display initialized");
-  Serial.println("=== SETUP COMPLETE - READY FOR OPERATION ===");
+  // Use char arrays with safe bounds checking
+  char line1[17]; // LCD is 16 chars + null terminator
+  char line2[17];
+  
+  // Clear buffers to prevent corruption
+  memset(line1, 0, sizeof(line1));
+  memset(line2, 0, sizeof(line2));
+  
+  if (_flushFlowActive)
+  {
+    // When workflow is running: 2 lines
+    // L1: G00        W000ML
+    // L2: L00 R00 I00
+    float totalGallons = calculateTotalGallons();
+    
+    // Limit values to prevent buffer overflow
+    int gallons = min(999, (int)totalGallons);
+    int waste = min(9999, totalWasteML);
+
+    if (waste > 9999)
+    {
+      int liters = waste / 1000;
+      snprintf(line1, sizeof(line1), "G%03d     W%02dL", gallons, min(99, liters));
+    }
+    else
+    {
+      snprintf(line1, sizeof(line1), "G%03d   W%04dML", gallons, waste);
+    }
+
+    // Format counters with bounds checking (max 999)
+    int leftCount = min(999, leftFlushCount);
+    int rightCount = min(999, rightFlushCount);
+    int imgCount = min(999, imageCount);
+    snprintf(line2, sizeof(line2), "L%03d R%03d I%03d", leftCount, rightCount, imgCount);
+
+    displayLCD(line1, line2);
+  }
+  else
+  {
+    // When stopped: PRESS START / L00 R00 I00
+    int leftCount = min(999, leftFlushCount);
+    int rightCount = min(999, rightFlushCount);
+    int imgCount = min(999, imageCount);
+    snprintf(line2, sizeof(line2), "L%03d R%03d I%03d", leftCount, rightCount, imgCount);
+    displayLCD("PRESS START", line2);
+  }
 }
 
-// Test functions for waste repo debugging
-void testWasteRepoTiming() {
-  Serial.println("=== WASTE REPO TIMING TEST ===");
-  
+void incrementFlushCounter()
+{
+  // This function is called from draw_functions.cpp
+  updateLCDDisplay();
+  drawFlowDetails(); // Update TFT flow details to match LCD
+}
+
+void incrementWasteCounter()
+{
+  // This function is called from draw_functions.cpp
+  updateLCDDisplay();
+  drawFlowDetails(); // Update TFT flow details to match LCD
+}
+
+void testWasteRepoTiming()
+{
+  writeLog("=== WASTE REPO TIMING TEST ===");
   int wasteQty = flushSettings.getWasteQtyPerFlush();
   int pumpRate = PUMP_WASTE_ML_SEC;
   int delayMs = flushSettings.getWasteRepoTriggerDelayMs();
-  
-  Serial.println("Current Settings:");
-  Serial.println("- Waste Qty Per Flush: " + String(wasteQty) + "ml");
-  Serial.println("- Pump Rate: " + String(pumpRate) + "ml/sec");
-  Serial.println("- Waste Repo Delay: " + String(delayMs) + "ms (" + String(delayMs/1000) + " seconds)");
-  
-  int expectedDuration = (wasteQty * 1000) / pumpRate;
-  Serial.println("- Expected Pump Duration: " + String(expectedDuration) + "ms (" + String(expectedDuration/1000.0) + " seconds)");
+  writeLog("- Waste Qty Per Flush: %dml", wasteQty);
+  writeLog("- Pump Rate: %dml/sec", pumpRate);
+  writeLog("- Waste Repo Delay: %dms", delayMs);
 }
 
-void testWasteRepoActivation() {
-  Serial.println("=== WASTE REPO ACTIVATION TEST ===");
-  Serial.println("Manual activation works when touching waste repo image");
-  Serial.println("Automatic activation should trigger after " + String(flushSettings.getWasteRepoTriggerDelayMs()) + "ms delay");
+void testWasteRepoActivation()
+{
+  writeLog("=== WASTE REPO ACTIVATION TEST ===");
+  writeLog("Manual activation works when touching waste repo image");
 }
 
-void runWasteRepoTests() {
+void runWasteRepoTests()
+{
   static bool testsRun = false;
-  if (!testsRun && millis() > 5000) {
+  if (!testsRun && millis() > 5000)
+  {
     testWasteRepoTiming();
     testWasteRepoActivation();
     testsRun = true;

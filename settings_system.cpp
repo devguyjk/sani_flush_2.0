@@ -1,4 +1,5 @@
 #include "settings_system.h"
+#include "draw_functions.h" // For writeLog
 
 // Forward declaration for drawFlowDetails
 void drawFlowDetails();
@@ -24,9 +25,11 @@ SettingsSystem::SettingsSystem(TFT_eSPI* display) {
   settings[2] = {"Waste Qty Per Flush", "ml", 50, 25, 3000, 25, false, "wasteQty"};
   settings[3] = {"Pic Every N Flushes", "", 2, 1, 10, 1, false, "picFlushes"};
   settings[4] = {"Waste Repo Pump Delay", "sec", 7, 1, 20, 1, false, "wasteDelay"};
-  settings[5] = {"Camera Pic Delay", "ms", 2500, 500, 10000, 500, false, "cameraPicDelay"};
-  settings[6] = {"Flush right, after left flush delay", "sec", 5, 1, 100, 1, false, "flushRighDelay"};
+  settings[5] = {"Camera Pic Delay", "ms", 25000, 500, 30000, 500, false, "cameraPicDelay"};
+  settings[6] = {"Flush right, after left flush delay", "sec", 10, 1, 100, 1, false, "flushRighDelay"};
   settings[7] = {"Screen Timeout", "sec", 60, 10, 300, 10, false, "timeout"};
+  settings[8] = {"Volume of water per flush left toilet", "oz", 128, 60, 1000, 12, false, "leftTWaterFlushed"};
+  settings[9] = {"Volume of water per flush right toilet", "oz", 128, 60, 1000, 12, false, "rightTWaterFlushed"};
 }
 
 void SettingsSystem::begin() {
@@ -65,11 +68,11 @@ void SettingsSystem::handleTouch() {
 }
 
 void SettingsSystem::handleSettingsPageTouch(int x, int y) {
-  Serial.printf("Touch detected: X=%d, Y=%d\n", x, y);
+  writeLog("Settings Touch: X=%d, Y=%d", x, y);
   
   // Back button
   if(x >= 10 && x <= 50 && y >= 10 && y <= 40) {
-    Serial.println("Back button touched - hiding settings!");
+    writeLog("Settings: Back button touched");
     resetEditingStates();
     settingsVisible = false;
     scrollOffset = 0;
@@ -78,40 +81,37 @@ void SettingsSystem::handleSettingsPageTouch(int x, int y) {
   
   // Scroll arrow buttons - LARGER TOUCH AREAS
   if(x >= 200 && x <= 235) {
-    Serial.println("Touch in scroll arrow area");
+    // writeLog("Touch in scroll arrow area"); // Too verbose
     
     // Up arrow - LARGER touch area
     if(y >= 55 && y <= 90) {
-      Serial.println("UP arrow touched!");
+      writeLog("Settings: Scroll UP touched");
       if(scrollOffset > 0) {
         scrollOffset -= 35; // Scroll UP (show previous items)
         if(scrollOffset < 0) scrollOffset = 0;
-        Serial.println("Scrolled up - New offset: " + String(scrollOffset));
+        writeLog("Settings: Scrolled up - New offset: %d", scrollOffset);
         drawInterface();
       } else {
-        Serial.println("Already at top - cannot scroll up");
+        writeLog("Settings: Already at top - cannot scroll up");
       }
       return;
     }
     
     // Down arrow - LARGER touch area
     if(y >= 275 && y <= 320) {  // Extended to bottom of screen
-      Serial.println("DOWN arrow touched!");
+      writeLog("Settings: Scroll DOWN touched");
       int maxScroll = max(0, (8 * 35) - (320 - 55 - 10));
-      Serial.println("Max scroll: " + String(maxScroll));
+      // writeLog("Max scroll: %d", maxScroll); // Too verbose
       if(scrollOffset < maxScroll) {
         scrollOffset += 35; // Scroll DOWN (show next items)
         if(scrollOffset > maxScroll) scrollOffset = maxScroll;
-        Serial.println("Scrolled down - New offset: " + String(scrollOffset));
+        writeLog("Settings: Scrolled down - New offset: %d", scrollOffset);
         drawInterface();
       } else {
-        Serial.println("Already at bottom - cannot scroll down");
+        writeLog("Settings: Already at bottom - cannot scroll down");
       }
       return;
     }
-    
-    Serial.println("Touch in scroll area but outside button ranges");
-    Serial.println("Up: Y=55-90, Down: Y=275-320");
   }
   
   // Settings items - updated for compact layout
@@ -126,23 +126,23 @@ void SettingsSystem::handleSettingsPageTouch(int x, int y) {
        x >= 10 && x <= 195 &&  // Reduced to avoid scroll arrows
        itemY >= startY && itemY <= (320 - 10 - itemHeight)) {
       
-      Serial.println("Setting " + String(i) + " (" + String(settings[i].label) + ") touched!");
+      writeLog("Settings: Item %d (%s) touched", i, settings[i].label);
       
       if(settings[i].editing) {
         // Handle value editing
         if(x < 120) {
           settings[i].value = max(settings[i].minVal, 
             settings[i].value - settings[i].step);
-          Serial.println("Decreased to: " + String(settings[i].value));
+          writeLog("Settings: Decreased '%s' to %d", settings[i].label, settings[i].value);
         } else {
           settings[i].value = min(settings[i].maxVal, 
             settings[i].value + settings[i].step);
-          Serial.println("Increased to: " + String(settings[i].value));
+          writeLog("Settings: Increased '%s' to %d", settings[i].label, settings[i].value);
         }
         saveSettings();
       } else {
         // Enter edit mode
-        Serial.println("Entering edit mode for: " + String(settings[i].label));
+        writeLog("Settings: Entering edit mode for '%s'", settings[i].label);
         resetEditingStates();
         settings[i].editing = true;
       }
@@ -150,24 +150,23 @@ void SettingsSystem::handleSettingsPageTouch(int x, int y) {
       return;
     }
   }
-  
-  Serial.println("Touch not handled - outside all areas");
 }
 
 void SettingsSystem::loadSettings() {
   // FORCE DEFAULTS: Use code defaults instead of flash memory
-  Serial.println("Using code defaults (ignoring flash memory)");
+  writeLog("Using code defaults (ignoring flash memory)");
   for(int i = 0; i < 8; i++) {
-    Serial.println("Setting " + String(i) + " (" + String(settings[i].label) + "): " + String(settings[i].value));
+    writeLog("Setting %d (%s): %d", i, settings[i].label, settings[i].value);
+    writeLog("Settings: Loading default '%s' = %d", settings[i].label, settings[i].value);
   }
-  Serial.println("All settings loaded from code defaults");
+  writeLog("All settings loaded from code defaults");
 }
 
 void SettingsSystem::saveSettings() {
   for(int i = 0; i < 8; i++) {
     prefs.putInt(settings[i].prefKey, settings[i].value);
   }
-  Serial.println("Flush settings saved to memory");
+  writeLog("Flush settings saved to memory");
   
   // Update flow details when settings change
   if (!settingsVisible) {
@@ -208,11 +207,7 @@ void SettingsSystem::drawInterface() {
   tft->setTextDatum(MC_DATUM);
   // Draw inverted triangle using multiple lines
   tft->drawString("v", 217, 292);  // Draw simple v character
-  
-  // Debug info
-  Serial.println("Up arrow: X=200-235, Y=55-90");
-  Serial.println("Down arrow: X=200-235, Y=275-310");
-  Serial.println("Current scroll offset: " + String(scrollOffset));
+  // writeLog("Current scroll offset: %d", scrollOffset); // Too verbose
 }
 
 void SettingsSystem::drawHeader() {
@@ -267,8 +262,8 @@ void SettingsSystem::drawSettingItem(int index, int y) {
     tft->setTextColor(TFT_WHITE);
     tft->setTextSize(1);
     tft->setTextDatum(TR_DATUM);
-    tft->drawString("◀", x + w - 35, y + 18);
-    tft->drawString("▶", x + w - 10, y + 18);
+    tft->drawString("<", x + w - 35, y + 18);
+    tft->drawString(">", x + w - 10, y + 18);
     
     tft->setTextColor(TFT_WHITE);
     tft->setTextSize(1);
@@ -327,9 +322,8 @@ int SettingsSystem::getPicEveryNFlushes() {
   return settings[3].value;
 }
 
-// Additional getters for compatibility
 int SettingsSystem::getRightToiletFlushDelaySec() {
-  return 30; // Default 30 seconds
+  return settings[6].value; // "Flush right, after left flush delay" in seconds
 }
 
 
@@ -354,3 +348,12 @@ int SettingsSystem::getToiletFlushRelayHoldTimeMS() {
 int SettingsSystem::getFlushCountForCameraCapture() {
   return settings[3].value; // Use setting value
 }
+
+int SettingsSystem::getLeftToiletWaterOz() {
+  return settings[8].value; // Left toilet water volume in oz
+}
+
+int SettingsSystem::getRightToiletWaterOz() {
+  return settings[9].value; // Right toilet water volume in oz
+}
+

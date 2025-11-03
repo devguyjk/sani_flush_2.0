@@ -1,11 +1,10 @@
 #include "Shapes.h"
-
+#include "draw_functions.h" // For writeLog
 // Shape implementation
 Shape::Shape(String _name) : name(_name) {}
-
-void Shape::printDetails() {
-  Serial.print("Shape: Name = ");
-  Serial.println(name);
+void Shape::printDetails(bool shouldPrint) {
+  if (!shouldPrint) return;
+  writeLog("Shape: Name = %s", name.c_str());
 }
 
 // Rectangle implementation
@@ -16,16 +15,10 @@ bool Rectangle::isTouched(int16_t touchX, int16_t touchY) {
   return (touchX >= x && touchX <= (x + width) && touchY >= y && touchY <= (y + height));
 }
 
-void Rectangle::printDetails() {
-  Shape::printDetails();
-  Serial.print("Rectangle: X = ");
-  Serial.print(x);
-  Serial.print(", Y = ");
-  Serial.print(y);
-  Serial.print(", Width = ");
-  Serial.print(width);
-  Serial.print(", Height = ");
-  Serial.println(height);
+void Rectangle::printDetails(bool shouldPrint) {
+  if (!shouldPrint) return;
+  Shape::printDetails(shouldPrint);
+  writeLog("Rectangle: X=%d, Y=%d, Width=%d, Height=%d", x, y, width, height);
 }
 
 // Ellipse implementation
@@ -37,16 +30,10 @@ bool Ellipse::isTouched(int16_t touchX, int16_t touchY) {
   return (pow((touchX - centerX), 2) / pow(a, 2) + pow((touchY - centerY), 2) / pow(b, 2) <= 1);
 }
 
-void Ellipse::printDetails() {
-  Shape::printDetails();
-  Serial.print("Ellipse: CenterX = ");
-  Serial.print(centerX);
-  Serial.print(", CenterY = ");
-  Serial.print(centerY);
-  Serial.print(", a = ");
-  Serial.print(a);
-  Serial.print(", b = ");
-  Serial.println(b);
+void Ellipse::printDetails(bool shouldPrint) {
+  if (!shouldPrint) return;
+  Shape::printDetails(shouldPrint);
+  writeLog("Ellipse: CenterX=%d, CenterY=%d, a=%d, b=%d", centerX, centerY, a, b);
 }
 
 // Circle implementation
@@ -59,12 +46,8 @@ bool Circle::isTouched(int16_t touchX, int16_t touchY) {
   return (distance <= radius);
 }
 
-void Circle::printDetails() {
-  Shape::printDetails();
-  Serial.print("Circle: CenterX = ");
-  Serial.print(centerX);
-  Serial.print(", CenterY = ");
-  Serial.print(centerY);
-  Serial.print(", Radius = ");
-  Serial.println(radius);
+void Circle::printDetails(bool shouldPrint) {
+  if (!shouldPrint) return;
+  Shape::printDetails(shouldPrint);
+  writeLog("Circle: CenterX=%d, CenterY=%d, Radius=%d", centerX, centerY, radius);
 }

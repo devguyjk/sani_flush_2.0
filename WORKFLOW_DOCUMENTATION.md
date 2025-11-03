@@ -1,140 +1,148 @@
 # Sani Flush 2.0 - Complete Workflow Documentation
 
-## Overview
-This document describes the complete workflow of the Sani Flush 2.0 system, including timing calculations and settings integration.
+## System Overview
+The Sani Flush 2.0 system manages dual toilet flushing with integrated camera capture and waste repository management. The system operates on precise timing cycles with configurable parameters.
 
-## Settings Configuration
+## Core Components
+- **Left Toilet** (T1 relay) - Primary toilet with immediate start
+- **Right Toilet** (T2 relay) - Secondary toilet with configurable delay
+- **Left Cameras** (2x cameras) - Dual camera setup for left side monitoring
+- **Right Cameras** (2x cameras) - Dual camera setup for right side monitoring  
+- **Left Waste Repository** (P1 relay) - Waste pump for left side
+- **Right Waste Repository** (P2 relay) - Waste pump for right side
 
-| Setting | Default Value | Unit | Description |
-|---------|---------------|------|-------------|
-| Flush Relay Time Lapse | 3000 | ms | Duration toilet flush relay stays active |
-| Flush Workflow Repeat | 60 | sec | Time between flush cycles |
-| Waste Qty Per Flush | 150 | ml | Amount of waste to pump per flush |
-| Pic Every N Flushes | 3 | count | Take photos every N flushes |
-| Waste Repo Pump Delay | 7 | sec | Delay after flush starts before waste pump activates |
-| Camera Pic Delay | 2500 | ms | Delay after flush before taking photos |
-| Flush Right After Left Flush Delay | 5 | sec | Delay between left and right toilet flushes |
-
-## Complete Workflow
-
-### 1. System Start
-- User presses Start/Stop button (triangle → square)
-- System initializes flush flow sequence
-- Left toilet flush begins immediately
-
-### 2. Left Toilet Flush Sequence
-
-#### 2.1 Toilet Flush Activation (T=0ms)
-- **Action**: Left toilet flush relay (T1) activates
-- **Duration**: 3000ms (Flush Relay Time Lapse setting)
-- **Visual**: Toilet animation begins (4 stages, 500ms each)
-- **Timer**: Starts counting down from 60 seconds
-
-#### 2.2 Waste Repository Activation (T=7000ms)
-- **Trigger**: 7 seconds after flush starts (Waste Repo Pump Delay setting)
-- **Action**: Left waste pump relay (P1) activates
-- **Duration**: Calculated as `(150ml × 1000) ÷ 25ml/sec = 6000ms`
-- **Visual**: Waste repo animation (5 stages, 400ms each, cycles until pump stops)
-
-#### 2.3 Camera Photo Capture (T=2500ms after flush completes)
-- **Trigger**: Every 3rd flush (Pic Every N Flushes setting)
-- **Delay**: 2500ms after flush relay deactivates
-- **Action**: Dual camera capture (left01 + left02)
-- **Visual**: Camera flash animation
-
-### 3. Right Toilet Flush Sequence
-
-#### 3.1 Right Toilet Activation (T=5000ms from left start)
-- **Trigger**: 5 seconds after left toilet starts
-- **Action**: Right toilet flush relay (T2) activates
-- **Duration**: 3000ms (Flush Relay Time Lapse setting)
-- **Visual**: Right toilet animation begins
-- **Timer**: Starts counting down from 60 seconds
-
-#### 3.2 Right Waste Repository (T=12000ms from left start)
-- **Trigger**: 7 seconds after right flush starts
-- **Action**: Right waste pump relay (P2) activates
-- **Duration**: 6000ms (same calculation as left)
-- **Visual**: Right waste repo animation
-
-#### 3.3 Right Camera Capture
-- **Trigger**: Every 3rd flush, 2500ms after flush completes
-- **Action**: Dual camera capture (right01 + right02)
-- **Flush Counter**: Increments when right flush completes
-
-### 4. Cycle Repeat
-
-#### 4.1 Left Toilet Restart
-- **Trigger**: 60 seconds after left flush completes
-- **Timer**: Counts down from 60 seconds during wait period
-- **Action**: Returns to step 2.1
-
-#### 4.2 Right Toilet Restart  
-- **Trigger**: 60 seconds after right flush completes + 5 second delay
-- **Timer**: Counts down appropriately
-- **Action**: Returns to step 3.1
-
-## Timing Calculations
-
-### Relay Duration Calculations
-
-#### Toilet Flush Relay
+## Timing Configuration (From Settings System)
 ```
-Duration = Flush Relay Time Lapse setting
-Default = 3000ms (3 seconds)
+Flush Workflow Repeat: 120 seconds (2 minutes)
+Right Toilet Flush Delay: 10 seconds after left toilet
+Flush Relay Time Lapse: 3000ms (3 seconds relay hold)
+Waste Repo Trigger Delay: 7 seconds after flush start
+Camera Pic Delay: 25000ms (25 seconds after flush)
+Pic Every N Flushes: 2 (camera triggers every 2nd flush)
+Waste Qty Per Flush: 50ml
+Left Toilet Water Volume: 128oz per flush
+Right Toilet Water Volume: 128oz per flush
 ```
 
-#### Waste Pump Relay
+## Complete Workflow Cycle
+
+### Phase 1: Workflow Initialization (T+0s)
 ```
-Duration = (Waste Qty Per Flush × 1000) ÷ Pump Rate
-Default = (150ml × 1000) ÷ 25ml/sec = 6000ms (6 seconds)
+T+0s:    [BUTTON] START clicked
+T+0s:    [INIT] Workflow started - Left timer begins immediately
+T+0s:    [FLUSH] Left toilet flush #N starts
+T+0s:    [RELAY] T1 relay activated for 3000ms
+T+0s:    [COUNT] LEFT FLUSH counter incremented
+T+10s:   [INIT] Right timer starts (10s delay from settings)
+T+10s:   [FLUSH] Right toilet flush #N starts  
+T+10s:   [RELAY] T2 relay activated for 3000ms
+T+10s:   [COUNT] RIGHT FLUSH counter incremented
 ```
 
-### Timer Display Calculations
-
-#### During Flush
+### Phase 2: Waste Repository Activation (CRITICAL - Currently Not Working)
+**EXPECTED BEHAVIOR (from settings):**
 ```
-Remaining Time = (Flush Workflow Repeat ÷ 1000) - Elapsed Seconds
-Display = MM:SS format of remaining time
-```
-
-#### Between Flushes
-```
-Remaining Time = Total Wait Time - Elapsed Since Flush End
-Total Wait Time = Flush Workflow Repeat setting (60 seconds)
+T+7s:    [WASTE] Left waste repo should trigger (7s after left flush)
+T+7s:    [RELAY] P1 relay should activate for calculated duration
+T+7s:    [COUNT] Waste counter should increment by 50ml
+T+17s:   [WASTE] Right waste repo should trigger (7s after right flush)
+T+17s:   [RELAY] P2 relay should activate for calculated duration  
+T+17s:   [COUNT] Waste counter should increment by 50ml
 ```
 
-### Photo Capture Logic
+**ACTUAL BEHAVIOR (from log analysis):**
 ```
-Left Camera Trigger = (Flush Count + 1) % Pic Every N Flushes == 0
-Right Camera Trigger = Flush Count % Pic Every N Flushes == 0
+❌ WASTE REPOSITORY IS NOT FIRING AT ALL
+❌ No waste repo trigger logs found in the log file
+❌ No P1/P2 relay activation occurring
+❌ Waste counter not incrementing during automatic cycles
 ```
 
-## State Management
+### Phase 3: Camera Capture System (Working Correctly)
+```
+T+25s:   [CAMERA] Left camera 25s delay completed
+T+25s:   [CAMERA] Dual capture triggered (if flush count % 2 == 0)
+T+25s:   [QUEUE] Camera 1/2 queued (left01)
+T+25s:   [QUEUE] Camera 2/2 queued (left02)
+T+25s:   [COUNT] Image counter incremented
+T+35s:   [CAMERA] Right camera 25s delay completed
+T+35s:   [CAMERA] Dual capture triggered (if flush count % 2 == 0)
+T+35s:   [QUEUE] Camera 1/2 queued (right01)
+T+35s:   [QUEUE] Camera 2/2 queued (right02)
+T+35s:   [COUNT] Image counter incremented
+```
 
-### Animation States
-- **Toilet**: 4 stages, 500ms each
-- **Camera**: 5 stages, 100ms each  
-- **Waste Repo**: 5 stages, 400ms each (cycles during pump operation)
+### Phase 4: Cycle Completion and Reset
+```
+T+120s:  [CYCLE] Left timer reaches 00:00
+T+120s:  [TIMER] Left timer resets to 02:00
+T+120s:  [FLUSH] New left toilet flush cycle begins
+T+130s:  [CYCLE] Right timer reaches 00:00  
+T+130s:  [TIMER] Right timer resets to 02:00
+T+130s:  [FLUSH] New right toilet flush cycle begins
+```
+
+## Camera Trigger Logic
+The camera system uses a modulo-based trigger:
+- **Trigger Condition**: `flushCount % picEveryNFlushes == 0`
+- **Current Setting**: Every 2 flushes
+- **Examples**:
+  - Flush #21: 21 % 2 = 1 → NO camera trigger
+  - Flush #22: 22 % 2 = 0 → Camera triggers
+  - Flush #23: 23 % 2 = 1 → NO camera trigger
+
+## Critical Issue: Waste Repository Not Functioning
+
+### Expected vs Actual Behavior
+
+**EXPECTED (from settings_system.cpp):**
+```cpp
+// Should trigger 7 seconds after flush start
+if (leftElapsed >= flushSettings.getWasteRepoTriggerDelayMs() && 
+    !_animateWasteRepoLeft && !wasteRepoLeftTriggered) {
+    _animateWasteRepoLeft = true;
+    wasteRepoLeftTriggered = true;
+}
+```
+
+**ACTUAL (from log analysis):**
+- No waste repo trigger logs found
+- No P1/P2 relay activation
+- Waste counter remains static during automatic cycles
+- Only manual waste repo activation works (touch interface)
+
+### Root Cause Analysis
+The waste repository system is implemented but not being triggered during automatic flush cycles. The issue appears to be in the `updateFlushFlow()` function where the waste repo trigger logic may not be executing properly.
+
+## System State Tracking
+
+### Counters and Metrics
+- **Left Flush Count**: Increments at flush start
+- **Right Flush Count**: Increments at flush start  
+- **Image Count**: Increments when cameras are queued
+- **Waste Count**: Should increment when waste repo activates (NOT WORKING)
+- **Total Gallons**: Calculated from flush counts × toilet volumes
 
 ### Relay States
-- **T1/T2**: Toilet flush relays
-- **P1/P2**: Waste pump relays
-- All relays auto-deactivate after calculated durations
+- **T1 (Left Toilet)**: 3-second activation per flush
+- **T2 (Right Toilet)**: 3-second activation per flush
+- **P1 (Left Waste)**: Should activate for calculated duration (NOT WORKING)
+- **P2 (Right Waste)**: Should activate for calculated duration (NOT WORKING)
 
-### Timer States
-- **Left Timer**: Counts down flush duration, then wait period
-- **Right Timer**: Counts down with 5-second offset
-- **Display**: Updates every second, shows MM:SS format
+## Timing Precision
+The system uses millisecond-precision timing with the following key intervals:
+- **Flush Duration**: 3000ms relay hold
+- **Cycle Period**: 120000ms (2 minutes)
+- **Right Delay**: 10000ms after left start
+- **Camera Delay**: 25000ms after flush start
+- **Waste Delay**: 7000ms after flush start (NOT WORKING)
 
-## Error Handling
-- WiFi disconnection: Logs error, continues operation
-- Camera timeout: Logs error, continues workflow
-- Settings validation: Min/max bounds enforced
-- Relay safety: All relays initialize to OFF state
+## Recommendations for Waste Repository Fix
 
-## Performance Metrics
-- **Flush Cycle Time**: ~65 seconds (60s + 5s delay)
-- **Total Waste Per Cycle**: 300ml (150ml × 2 toilets)
-- **Photos Per Hour**: ~36 photos (every 3rd flush, ~5 flushes/hour)
-- **Pump Duty Cycle**: ~18% (12s active per 65s cycle)
+1. **Debug the updateFlushFlow() function** - Add logging to verify waste repo trigger conditions
+2. **Check _leftFlushActive and _rightFlushActive states** - Ensure they're properly set during flush cycles
+3. **Verify wasteRepoLeftTriggered/wasteRepoRightTriggered flags** - May be preventing re-triggering
+4. **Test manual waste repo activation** - Confirm hardware and relay functionality
+5. **Add explicit waste repo logging** - Track when conditions should be met vs when they actually trigger
+
+The waste repository is a critical component for the system's intended functionality and must be resolved for proper operation.

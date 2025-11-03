@@ -2,6 +2,8 @@
 #define GLOBAL_VARS_H
 
 #include <TFT_eSPI.h>
+#include <LiquidCrystal_I2C.h>
+#include <HTTPClient.h>
 
 // Forward declaration of Shape class
 class Shape;
@@ -20,7 +22,7 @@ extern const int WASTE_REPO_HEIGHT;
 extern const int WASTE_REPO_WIDTH;
 extern const uint16_t BTN_TRIANGLE_COLOR;
 extern const uint16_t BTN_SQUARE_COLOR;
-extern const int WASTE_REPO_ANIM_DELAY;
+
 extern int RIGHT_TOILET_FLUSH_DELAY_MS;
 
 // Camera and server configuration
@@ -29,18 +31,12 @@ extern const char* left02CameraID;
 extern const char* right01CameraID;
 extern const char* right02CameraID;
 extern const char* uploadServerURL;
-extern String left01CameraCaptureUrl;
-extern String left02CameraCaptureUrl;
-extern String right01CameraCaptureUrl;
-extern String right02CameraCaptureUrl;
 
 // Hardware pin definitions
 extern const int RELAY_P1_PIN;
 extern const int RELAY_P2_PIN;
 extern const int RELAY_T1_PIN;
 extern const int RELAY_T2_PIN;
-extern const int TM1637_SCK;
-extern const int TM1637_DIO;
 
 // UI constants
 extern const unsigned long BUTTON_DEBOUNCE_MS;
@@ -66,6 +62,7 @@ extern bool _flushRight;
 extern bool _flashCameraLeft;
 extern bool _flashCameraRight;
 extern bool _animateWasteRepoLeft;
+extern bool _debugPrintShapeDetails;
 extern bool _animateWasteRepoRight;
 extern bool _drawTriangle;
 extern int _timerLeftMinutes;
@@ -84,6 +81,7 @@ extern unsigned long lastButtonPress;
 // Flush flow state variables
 extern bool _flushFlowActive;
 extern unsigned long _flushFlowStartTime;
+extern bool _initialRightFlushStarted;
 extern int _flushCount;
 extern bool _leftFlushActive;
 extern bool _rightFlushActive;
@@ -103,6 +101,9 @@ extern AnimationState _animStates[3][2]; // 0=Toilet, 1=Camera, 2=WasteRepo
 // TFT object
 extern TFT_eSPI tft;
 
+// LCD object
+extern LiquidCrystal_I2C lcd;
+
 // Shape pointers - declared in main file
 extern Shape *_saniLogoShape;
 extern Shape *_startStopButtonShape;
@@ -113,6 +114,25 @@ extern Shape *_cameraRightShape;
 extern Shape *_wasteRepoLeftShape;
 extern Shape *_wasteRepoRightShape;
 extern Shape *_hamburgerShape;
+
+// WiFi/HTTP object management
+extern HTTPClient* httpClient;
+extern bool wifiNeedsRecreation;
+extern unsigned long lastRightCameraCapture;
+
+// Simplified memory snapshot for ESP-IDF analysis
+struct MemorySnapshot {
+  size_t freeHeap;
+  size_t minFreeHeap;
+  size_t trackedObjects;
+  unsigned long timestamp;
+  
+  void capture();
+  void compare(MemorySnapshot& previous);
+};
+extern int completedWorkflowCycles;
+extern bool firstAnalysisComplete;
+extern unsigned long lastMemoryAnalysis;
 
 // Location enum
 enum Location

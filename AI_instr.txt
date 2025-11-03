@@ -1,19 +1,28 @@
-For automatic captures update the naming to the following:
- 
- Location can be RGT or LFT - right is rgt and left is lft
- seq can be 01 or 02 - each location camera has this value.
-hhmmaa ia military hour, 2 digit minute, 2 digit seconds
- auto-id - this is incremented from the most recent files auto-id value. Call the api endpoint /getautoid
+The best way to see what's going into memory and list the memory usage by component in the ESP-IDF environment (which is what you're likely using for C++ on the ESP32-S3) is through the IDF Monitor and the idf.py size command, combined with specific functions in your application for heap analysis.Here is a breakdown of the best methods, starting with the simple application scenario:1. Static Memory Usage Analysis (Compile-Time)For your simple application, the first step is to see how much static memory (Flash and RAM) your compiled code and static data consume.Use the idf.py size commandAfter building your project (idf.py build), run the following command in your project directory:Bashidf.py size
+What it shows: This command generates a detailed summary of memory usage by analyzing the compiled binary file (.elf).Key outputs to look for:Flash (Code & Data): The size of the application's code and read-only data stored in Flash memory.RAM (Data & BSS):.data: Initialized global and static variables (occupies Flash and is copied to RAM at startup)..bss: Uninitialized global and static variables (occupies RAM only, initialized to zero).Total RAM Usage: The combined size of .data and .bss, which is the static RAM footprint.This will tell you exactly how much memory your application's compiled logic and global variables take up before it even runs and starts allocating dynamic memory.2. Dynamic Memory Usage Analysis (Run-Time)For dynamic memory (the heap), which is where strings, buffers for httpclient, and object instances are allocated at runtime (like the memory used by your tft_espi library for the framebuffer/display), you'll use specific ESP-IDF API functions.A. Simple Heap TotalFor a quick, high-level view in your application's code:FunctionDescriptionesp_get_free_heap_size()Returns the total size of currently available heap memory (in bytes).esp_get_minimum_free_heap_size()Returns the minimum amount of free heap ever recorded since boot. This is critical for knowing if you had any close calls or temporary memory shortages.You can log these values at various points in your simple loop application to see how they change:C++#include "esp_heap_caps.h"
+#include "esp_log.h"
 
- Automatic Capture
-[AUTO-ID]_[YY][MM][DD]_[hhmmss]_[flush_number]_[location]_[seq].png
-022_250821_232513_0001_RGT_01.png
+// ... inside your loop or a status function ...
+size_t free_heap = esp_get_free_heap_size();
+size_t min_free_heap = esp_get_minimum_free_heap_size();
+ESP_LOGI("MEMORY", "Free Heap: %u bytes, Min Free Heap: %u bytes", free_heap, min_free_heap);
+B. Detailed Heap Component ListingTo list what is using memory with the amount in more detail (e.g., separating internal RAM from external PSRAM), you need to use the Heap Capabilities API. This is the closest you can get to listing memory usage by "component" or "type of allocation."The heap_caps_get_info() function allows you to query memory by specific type (cap), which is how different system components often allocate memory.Allocation Type (Capability)DescriptionMALLOC_CAP_INTERNALRAM on the ESP32 chip itself.MALLOC_CAP_SPIRAMExternal PSRAM (if configured). Used heavily by large frame buffers like for tft_espi or large data buffers.MALLOC_CAP_8BITMemory suitable for holding any 8-bit data.MALLOC_CAP_DMAMemory suitable for DMA operations (used by peripherals like SPI/TFT).You can iterate through these caps and log the results:C++// Example C++ for getting detailed info
+#include "esp_heap_caps.h"
 
- Manual Capture 
-[AUTO-ID]_[YY][MM][DD]_[hhmmss]_0000_[location]_[seq].png
-022_250821_232513_0000_RGT_01.pngg
+// List of memory capabilities to check
+const uint32_t caps_to_check[] = {
+    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT,
+    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
+    MALLOC_CAP_DMA,
+};
 
-
- this is an issue with the counter. The incrementing of the counter should be after the right side completes a flush sequence. Then the flush counter should increment +1.
-
- For some reason when the left captures a photo while in automatic mode, the first images have flush number set to 0000. It should begin with 0001, so something is wrong withthe logic here.
+void log_detailed_memory() {
+    for (int i = 0; i < sizeof(caps_to_check) / sizeof(caps_to_check[0]); i++) {
+        multi_heap_info_t info;
+        heap_caps_get_info(&info, caps_to_check[i]);
+        
+        ESP_LOGI("HEAP_DETAIL", "Cap 0x%X - Free: %u, Largest: %u, Blocks: %u", 
+                 caps_to_check[i], info.total_free_bytes, info.largest_free_block, info.number_of_free_blocks);
+    }
+}
+This will give you a clear picture of how much Internal RAM, PSRAM (SPIRAM), and DMA-capable memory is free, which helps isolate where memory issues might be originating.3. Advanced Heap Tracing (Allocation Source)For your complex application involving httpclient and other libraries, you'll eventually want to know which function or file is making the allocations.Use the Heap Trace FeatureESP-IDF has a powerful Heap Trace feature that can record a call stack for every dynamic memory allocation (malloc, new, etc.).Enable it in menuconfig: Go to Component config $\rightarrow$ Heap $\rightarrow$ Enable Heap Tracing.Instrument your code:Call heap_trace_start(HEAP_TRACE_ALL) at the beginning of your application.When you suspect a leak or want to analyze memory usage, call heap_trace_stop() and then heap_trace_dump() to print the full list of allocations and their corresponding call stacks to the console.This is the ultimate way to link memory usage back to the specific line of code or library function that is responsible for the allocation.Would you like me to provide a simple ESP-IDF C++ example showing how to log the **total free

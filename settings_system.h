@@ -41,17 +41,22 @@ public:
   
   // Additional getters for compatibility
   int getRightToiletFlushDelaySec();
-
   int getWasteRepoTriggerDelayMs();
   int getCameraTriggerAfterFlushMs();
   int getPumpWasteDoseML();
   int getToiletFlushRelayHoldTimeMS();
   int getFlushCountForCameraCapture();
   
+  // New getters for toilet water volumes
+  int getLeftToiletWaterOz();
+  int getRightToiletWaterOz();
+  
+
+  
 private:
   TFT_eSPI* tft;
   Preferences prefs;
-  FlushSetting settings[8];  // Increased from 4 to 8
+  FlushSetting settings[10];  // Increased to 10 for left/right toilet volumes
   bool settingsVisible;
   bool touching;
   unsigned long lastTouch;
